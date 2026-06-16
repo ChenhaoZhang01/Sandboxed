@@ -213,6 +213,11 @@ async function extractSignals(page, finalUrl) {
 
     const bodyText = lower(document.body ? document.body.innerText : "").slice(0, 5000);
     const titleText = lower(document.title);
+    const headingText = lower(
+      Array.from(document.querySelectorAll("h1, h2"))
+        .map((h) => h.innerText)
+        .join(" ")
+    ).slice(0, 1000);
 
     return {
       passwordFields,
@@ -222,13 +227,18 @@ async function extractSignals(page, finalUrl) {
       externalScriptCount: externalScripts.length,
       bodyText,
       titleText,
+      headingText,
     };
   });
 
-  // Brand-impersonation: page mentions a brand but lives on an unrelated domain.
-  // Weighted toward the title (visible branding) and matched on word boundaries
-  // so substrings like "apple" inside "AppleWebKit" don't false-positive.
-  const haystack = `${dom.titleText} ${dom.bodyText}`;
+  // Brand-impersonation: page claims to be a brand but lives on an unrelated
+  // domain. To avoid false positives we (a) ignore federated-login mentions like
+  // "Sign in with Apple", which appear on many legitimate pages, and (b) require
+  // the brand to appear in PROMINENT text (title/headings) — where real phishing
+  // puts it — rather than anywhere in the body.
+  const ssoPhrase =
+    /\b(?:sign[\s-]?in|sign[\s-]?up|log[\s-]?in|login|continue|register|connect)\s+with\s+\w+/g;
+  const prominent = `${dom.titleText} ${dom.headingText}`.replace(ssoPhrase, " ");
   const brandMentions = [];
   for (const brand of [
     "paypal", "apple", "icloud", "microsoft", "office365", "outlook",
@@ -237,7 +247,7 @@ async function extractSignals(page, finalUrl) {
     "usps", "dhl", "fedex", "irs",
   ]) {
     const re = new RegExp(`\\b${brand.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\b`);
-    if (re.test(haystack)) {
+    if (re.test(prominent)) {
       const brandRoot = brand.replace(/\s+/g, "");
       if (finalHost && !finalHost.includes(brandRoot)) brandMentions.push(brand);
     }
