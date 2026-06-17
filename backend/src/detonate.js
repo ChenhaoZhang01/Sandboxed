@@ -262,8 +262,11 @@ export async function detonate(targetUrl) {
     const pageMeta = await extractPageData(page);
     const runtimeSignals = await collectRuntimeSignals(page);
     const tlsSignals = await inspectTls(page, finalUrl);
+    const signalData = await extractSignals(page, finalUrl);
+    const cookieNames = (await page.cookies().catch(() => [])).map((cookie) => cookie.name);
     const signals = {
-      ...(await extractSignals(page, finalUrl)),
+      ...signalData,
+      cookieNames,
       runtime: runtimeSignals,
       tls: tlsSignals,
       typosquat: detectTyposquat(new URL(finalUrl).hostname || ""),
@@ -345,9 +348,20 @@ async function extractSignals(page, finalUrl) {
 
     const metaRefresh = !!document.querySelector('meta[http-equiv="refresh" i]');
 
-    const externalScripts = Array.from(document.querySelectorAll("script[src]"))
-      .map((s) => s.src)
-      .filter(Boolean);
+    const externalResourceUrls = Array.from(
+      document.querySelectorAll("script[src], iframe[src], img[src], link[href], video[src], audio[src], source[src], a[href]")
+    )
+      .map((el) => (el.getAttribute("src") || el.getAttribute("href") || "").trim())
+      .filter(Boolean)
+      .filter((value) => /^https?:/i.test(value))
+      .filter((value, index, list) => list.indexOf(value) === index);
+
+    const storageKeys = Array.from(
+      new Set([
+        ...Object.keys(window.localStorage || {}),
+        ...Object.keys(window.sessionStorage || {}),
+      ])
+    );
 
     const bodyText = lower(document.body ? document.body.innerText : "").slice(0, 5000);
     const titleText = lower(document.title);
@@ -362,7 +376,9 @@ async function extractSignals(page, finalUrl) {
       ccInputs,
       forms,
       metaRefresh,
-      externalScriptCount: externalScripts.length,
+      externalScriptCount: externalResourceUrls.length,
+      externalResourceUrls,
+      storageKeys,
       bodyText,
       titleText,
       headingText,

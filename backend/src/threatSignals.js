@@ -5,6 +5,14 @@ const HIGH_VALUE_BRANDS = [
   "usps", "dhl", "fedex", "irs",
 ];
 
+const SCAM_TERMS = [
+  "you won", "you have won", "winner", "claim your prize", "free gift card",
+  "survey", "giveaway", "limited time offer", "act now", "cash prize",
+  "congratulations", "claim now", "redeem now", "selected as winner",
+];
+
+const TRACKER_MARKERS = /analytics|tracking|pixel|doubleclick|googletagmanager|google-analytics|facebook|facebook.net|fbcdn|clarity|hotjar|segment|tiktok|criteo|scorecardresearch|quantserve|adnxs|taboola|bidr|gtm|matomo|sentry/i;
+
 function normalizeHost(hostname) {
   return String(hostname || "")
     .toLowerCase()
@@ -36,6 +44,24 @@ function levenshteinDistance(a, b) {
   return matrix[left.length][right.length];
 }
 
+function normalizeHostname(value) {
+  try {
+    return new URL(value).hostname.replace(/^www\./, "").toLowerCase();
+  } catch {
+    return String(value || "").replace(/^www\./, "").toLowerCase();
+  }
+}
+
+export function detectSurveyGiveawayScam(text) {
+  const haystack = String(text || "").toLowerCase();
+  const matchedTerms = SCAM_TERMS.filter((term) => haystack.includes(term));
+
+  return {
+    suspicious: matchedTerms.length > 0,
+    matchedTerms,
+  };
+}
+
 export function detectTyposquat(hostname) {
   const labels = normalizeHost(hostname);
   if (labels.length < 2) return null;
@@ -47,6 +73,30 @@ export function detectTyposquat(hostname) {
     .sort((a, b) => a.distance - b.distance);
 
   return brandMatches.length > 0 ? { hostname, brand: brandMatches[0].brand, distance: brandMatches[0].distance } : null;
+}
+
+export function auditThirdPartyTrackers(externalUrls = [], finalUrl = "", cookies = [], storageKeys = []) {
+  const baseHost = normalizeHostname(finalUrl);
+  const thirdParty = (externalUrls || [])
+    .map((value) => String(value || ""))
+    .filter(Boolean)
+    .filter((value) => {
+      try {
+        return normalizeHostname(value) !== baseHost;
+      } catch {
+        return false;
+      }
+    });
+
+  const trackerDomains = [...new Set(thirdParty.filter((value) => TRACKER_MARKERS.test(value)))];
+
+  return {
+    thirdPartyCount: thirdParty.length,
+    trackerCount: trackerDomains.length,
+    trackerDomains,
+    cookieCount: Array.isArray(cookies) ? cookies.length : 0,
+    storageKeyCount: Array.isArray(storageKeys) ? storageKeys.length : 0,
+  };
 }
 
 export function inspectTlsSecurity(url, securityDetails) {
@@ -112,6 +162,13 @@ export function classifySignalThreats(signals = {}) {
   const runtime = signals.runtime || {};
   const tls = signals.tls || {};
   const typosquat = signals.typosquat || null;
+  const scam = detectSurveyGiveawayScam(`${signals.titleText || ""} ${signals.headingText || ""} ${signals.bodyText || ""}`);
+  const trackerAudit = auditThirdPartyTrackers(
+    signals.externalResourceUrls || [],
+    signals.finalUrl || signals.requestedUrl || "",
+    signals.cookieNames || [],
+    signals.storageKeys || []
+  );
 
   const clipboardWrites = countValue(runtime.clipboardWrites);
   const evalCalls = countValue(runtime.evalCalls);
@@ -121,12 +178,18 @@ export function classifySignalThreats(signals = {}) {
   const walletCalls = countValue(runtime.walletCalls);
   const walletProviders = countValue(runtime.walletProviders);
 
+  if (scam.suspicious) add(18, `Survey/giveaway scam language detected: ${scam.matchedTerms.join(", ")}`);
   if (clipboardWrites > 0) add(8, `Clipboard write hooks were observed (${clipboardWrites} call(s))`);
   if ((evalCalls + functionCtorCalls) > 0) add(10, `Dynamic code execution hooks were observed (${evalCalls + functionCtorCalls} call(s))`);
   if (keystrokeHooks > 0) add(8, `Keylogging-style listener hooks were attached (${keystrokeHooks} listener(s))`);
   if (popunderAttempts > 0) add(12, `Window-opening/pop-under behavior was injected (${popunderAttempts} attempt(s))`);
   if (walletCalls > 0 || walletProviders > 0) add(25, "Wallet provider / connect behavior is present, a common drainers pattern");
   if (typosquat) add(18, `Typosquatted brand lookalike detected: ${typosquat.hostname} resembles ${typosquat.brand}`);
+
+  if (trackerAudit.trackerCount > 0) add(8, `Third-party tracker domains were loaded (${trackerAudit.trackerCount})`);
+  if (trackerAudit.thirdPartyCount >= 5) add(6, `Many third-party resources were loaded (${trackerAudit.thirdPartyCount})`);
+  if (trackerAudit.cookieCount >= 5) add(5, `The page uses many cookies or cookie-like storage entries (${trackerAudit.cookieCount})`);
+  if (trackerAudit.storageKeyCount >= 8) add(5, `Client-side storage is heavily used (${trackerAudit.storageKeyCount} keys)`);
 
   if (tls.insecure) add(10, "Page is served over plain HTTP");
   if (tls.hostnameMismatch) add(18, "TLS certificate subject does not match the destination host");

@@ -3,7 +3,34 @@ import assert from "node:assert/strict";
 import { mock } from "node:test";
 
 import { scoreRisk } from "../src/risk.js";
-import { classifySignalThreats, detectTyposquat, inspectTlsSecurity } from "../src/threatSignals.js";
+import {
+  auditThirdPartyTrackers,
+  classifySignalThreats,
+  detectSurveyGiveawayScam,
+  detectTyposquat,
+  inspectTlsSecurity,
+} from "../src/threatSignals.js";
+
+test("detectSurveyGiveawayScam catches giveaway language", () => {
+  assert.deepEqual(detectSurveyGiveawayScam("You won a free gift card — claim now!"), {
+    suspicious: true,
+    matchedTerms: ["you won", "free gift card", "claim now"],
+  });
+});
+
+test("auditThirdPartyTrackers counts third-party trackers and cookies", () => {
+  const audit = auditThirdPartyTrackers(
+    ["https://www.google-analytics.com/ga.js", "https://cdn.example.test/app.js"],
+    "https://safe.example.test/",
+    ["session", "uid", "token", "lang", "theme"],
+    ["a", "b", "c", "d", "e", "f", "g"]
+  );
+
+  assert.equal(audit.thirdPartyCount, 2);
+  assert.equal(audit.trackerCount, 1);
+  assert.equal(audit.cookieCount, 5);
+  assert.equal(audit.storageKeyCount, 7);
+});
 
 test("detectTyposquat flags paypa1 lookalikes", () => {
   assert.deepEqual(detectTyposquat("paypa1.com"), {
