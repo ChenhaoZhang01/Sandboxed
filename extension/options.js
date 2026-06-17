@@ -7,6 +7,8 @@ const modeInputs = document.querySelectorAll('input[name="mode"]');
 const layerDomainAge = document.getElementById("layer-domain-age");
 const layerSafeBrowsing = document.getElementById("layer-safe-browsing");
 const layerPhishing = document.getElementById("layer-phishing-enrichment");
+const layerRecordReplay = document.getElementById("layer-record-replay");
+const layerCredentialTrap = document.getElementById("layer-credential-trap");
 const historySwitch = document.getElementById("historySwitch");
 
 // ---------------- LOAD ----------------
@@ -23,6 +25,8 @@ SBX.getSettings().then((s) => {
   layerDomainAge.checked = s.analysisLayers.domainAge;
   layerSafeBrowsing.checked = s.analysisLayers.safeBrowsing;
   layerPhishing.checked = s.analysisLayers.phishingEnrichment;
+  layerRecordReplay.checked = s.analysisLayers.recordReplay;
+  layerCredentialTrap.checked = s.analysisLayers.credentialTrap;
 
   // history default (if missing)
   historySwitch.checked = s.historyEnabled ?? true;
@@ -41,6 +45,8 @@ document.getElementById("save").addEventListener("click", async () => {
       domainAge: layerDomainAge.checked,
       safeBrowsing: layerSafeBrowsing.checked,
       phishingEnrichment: layerPhishing.checked,
+      recordReplay: layerRecordReplay.checked,
+      credentialTrap: layerCredentialTrap.checked,
     },
   });
 

@@ -13,6 +13,8 @@ const SBX = (() => {
       domainAge: true,
       safeBrowsing: true,
       phishingEnrichment: false,
+      recordReplay: true,
+      credentialTrap: false,
     },
     historyEnabled: true,
   };
@@ -23,6 +25,9 @@ const SBX = (() => {
       domainAge: layers.domainAge !== false,
       safeBrowsing: layers.safeBrowsing !== false,
       phishingEnrichment: layers.phishingEnrichment === true,
+      // Recorded replay (default on) + canary password trap (opt-in).
+      recordReplay: layers.recordReplay !== false,
+      credentialTrap: layers.credentialTrap === true,
     };
   }
 
@@ -102,10 +107,13 @@ async function detonate(url, opts = {}) {
     }
 
     try {
+      // Don't persist replay frames in the cache — they're large base64 JPEGs
+      // that would bloat verifiedLinks.json. Everything else is kept.
+      const { replayFrames, ...cacheable } = data;
       await fetch(base + "/verified-links/add", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ url, data }),
+        body: JSON.stringify({ url, data: cacheable }),
       });
     } catch (e) {
       console.warn("failed to store verified link:", e.message);
@@ -188,17 +196,165 @@ async function detonate(url, opts = {}) {
     return el("div", { class: "sbx-phishing sbx-ok", text: "✓ No spoof detected" });
   }
 
+  function wsBaseFrom(base) {
+    return base.replace(/^http/i, "ws");
+  }
+
+  function trapText(t) {
+    if (!t) return "—";
+    if (t.blocked) {
+      return (t.crossDomain ? "⚠️ off-domain → " : "captured → ") +
+        (t.host || "?") + " (blocked)";
+    }
+    if (t.attempted) return "filled canary; no submission";
+    return "no login form";
+  }
+
+  // Replay player: scrubs the screencast frames through the chamber's shot <img>.
+  function buildReplay(frames, shotImg) {
+    if (!frames || !frames.length || !shotImg) return null;
+    let idx = 0;
+    let timer = null;
+    const playBtn = el("button", { class: "btn btn-ghost btn-sm", text: "▶ Replay" });
+    const scrub = el("input", {
+      class: "replay-scrub",
+      attrs: { type: "range", min: "0", max: String(frames.length - 1), value: "0" },
+    });
+    const time = el("span", { class: "mono replay-time", text: "1 / " + frames.length });
+    const show = (i) => {
+      idx = Math.max(0, Math.min(frames.length - 1, i));
+      shotImg.src = "data:image/jpeg;base64," + frames[idx].data;
+      scrub.value = String(idx);
+      time.textContent = idx + 1 + " / " + frames.length;
+    };
+    const stop = () => {
+      if (timer) { clearInterval(timer); timer = null; }
+      playBtn.textContent = "▶ Replay";
+    };
+    playBtn.addEventListener("click", () => {
+      if (timer) { stop(); return; }
+      if (idx >= frames.length - 1) idx = -1;
+      playBtn.textContent = "⏸ Pause";
+      timer = setInterval(() => {
+        if (idx >= frames.length - 1) { stop(); return; }
+        show(idx + 1);
+      }, 350);
+    });
+    scrub.addEventListener("input", () => { stop(); show(Number(scrub.value)); });
+    return el("div", { class: "replay-controls" }, [playBtn, scrub, time]);
+  }
+
+  // Live interactive sandbox: streams the page over a WebSocket and forwards
+  // clicks/keys back. Appends a canvas into the chamber; returns the control bar.
+  function buildLive(targetUrl, chamber, shotImg) {
+    if (!targetUrl) return null;
+    const canvas = el("canvas", { class: "live-canvas hidden", attrs: { tabindex: "0" } });
+    chamber.appendChild(canvas);
+    const startBtn = el("button", { class: "btn btn-ghost btn-sm", text: "Explore live ▶" });
+    const stopBtn = el("button", { class: "btn btn-ghost btn-sm hidden", text: "Stop live ■" });
+    const note = el("span", { class: "mono live-note" });
+
+    const ctx = canvas.getContext("2d");
+    const img = new Image();
+    img.onload = () => ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+    let socket = null;
+    let vw = 1280;
+    let vh = 800;
+
+    const send = (o) => {
+      if (socket && socket.readyState === WebSocket.OPEN) socket.send(JSON.stringify(o));
+    };
+    const coords = (e) => {
+      const r = canvas.getBoundingClientRect();
+      return { x: (e.clientX - r.left) * (vw / r.width), y: (e.clientY - r.top) * (vh / r.height) };
+    };
+    const stop = () => {
+      if (socket) { try { socket.close(); } catch {} socket = null; }
+      canvas.classList.add("hidden");
+      if (shotImg) shotImg.classList.remove("hidden");
+      stopBtn.classList.add("hidden");
+      startBtn.classList.remove("hidden");
+    };
+
+    const start = async () => {
+      // The toolbar popup closes on focus loss, which would kill a live session
+      // the instant you click into it — open the persistent result window instead.
+      if (typeof document !== "undefined" && document.body.classList.contains("popup")) {
+        chrome.runtime.sendMessage({ type: "OPEN_RESULT", url: targetUrl });
+        return;
+      }
+      if (socket) return;
+      note.textContent = "connecting…";
+      startBtn.classList.add("hidden");
+      const base = await getApiBase();
+      let sock;
+      try {
+        sock = new WebSocket(wsBaseFrom(base) + "/live?url=" + encodeURIComponent(targetUrl));
+      } catch {
+        note.textContent = "could not connect";
+        startBtn.classList.remove("hidden");
+        return;
+      }
+      socket = sock;
+      sock.onmessage = (ev) => {
+        let m;
+        try { m = JSON.parse(ev.data); } catch { return; }
+        if (m.type === "ready") {
+          vw = (m.viewport && m.viewport.width) || 1280;
+          vh = (m.viewport && m.viewport.height) || 800;
+          canvas.width = vw;
+          canvas.height = vh;
+          if (shotImg) shotImg.classList.add("hidden");
+          canvas.classList.remove("hidden");
+          stopBtn.classList.remove("hidden");
+          note.textContent = "live — click & type in the sandbox";
+          canvas.focus();
+        } else if (m.type === "frame") {
+          img.src = "data:image/jpeg;base64," + m.data;
+        } else if (m.type === "error") {
+          note.textContent = m.message || "live error";
+          stop();
+        } else if (m.type === "closed") {
+          note.textContent = "session ended (" + (m.reason || "closed") + ")";
+          stop();
+        }
+      };
+      sock.onclose = () => { if (socket === sock) stop(); };
+      sock.onerror = () => { note.textContent = "connection error"; };
+    };
+
+    let lastMove = 0;
+    const LIVE_KEYS = ["Enter", "Backspace", "Tab", "Delete", "Escape", "ArrowLeft", "ArrowUp", "ArrowRight", "ArrowDown", "Home", "End"];
+    canvas.addEventListener("mousedown", (e) => { e.preventDefault(); canvas.focus(); send({ type: "mouse", action: "down", button: e.button === 2 ? "right" : "left", ...coords(e) }); });
+    canvas.addEventListener("mouseup", (e) => send({ type: "mouse", action: "up", button: e.button === 2 ? "right" : "left", ...coords(e) }));
+    canvas.addEventListener("mousemove", (e) => { const n = Date.now(); if (n - lastMove < 40) return; lastMove = n; send({ type: "mouse", action: "move", ...coords(e) }); });
+    canvas.addEventListener("wheel", (e) => { e.preventDefault(); send({ type: "wheel", deltaX: e.deltaX, deltaY: e.deltaY, ...coords(e) }); }, { passive: false });
+    canvas.addEventListener("contextmenu", (e) => e.preventDefault());
+    canvas.addEventListener("keydown", (e) => {
+      if (!socket) return;
+      if (e.key.length === 1 && !e.ctrlKey && !e.metaKey) { send({ type: "text", text: e.key }); e.preventDefault(); }
+      else if (LIVE_KEYS.includes(e.key)) { send({ type: "key", key: e.key }); e.preventDefault(); }
+    });
+    startBtn.addEventListener("click", start);
+    stopBtn.addEventListener("click", stop);
+    return el("div", { class: "live-controls" }, [startBtn, stopBtn, note]);
+  }
+
   function renderResult(root, d) {
     const verdict = d.verdict || "safe";
 
     const chamberKids = [el("div", { class: "grid-bg" })];
-    if (d.screenshotBase64) {
-      chamberKids.push(
-        el("img", {
-          class: "shot",
-          attrs: { src: "data:image/jpeg;base64," + d.screenshotBase64, alt: "Detonated page" },
-        })
-      );
+    // Need a shot <img> if there's a screenshot OR replay frames to scrub through.
+    let shotImg = null;
+    if (d.screenshotBase64 || (d.replayFrames && d.replayFrames.length)) {
+      shotImg = el("img", {
+        class: "shot",
+        attrs: {
+          src: d.screenshotBase64 ? "data:image/jpeg;base64," + d.screenshotBase64 : "",
+          alt: "Detonated page",
+        },
+      });
+      chamberKids.push(shotImg);
       chamberKids.push(el("div", { class: "glass" }));
     }
     const stamp = el("div", { class: "stamp stamp-in", data: { verdict } });
@@ -206,6 +362,12 @@ async function detonate(url, opts = {}) {
     stamp.appendChild(el("span", { class: "score", text: "· " + (d.score ?? 0) }));
     chamberKids.push(stamp);
     const chamber = el("div", { class: "chamber" }, chamberKids);
+
+    // Replay + live tools below the chamber.
+    const replayNode = buildReplay(d.replayFrames, shotImg);
+    const liveNode = buildLive(d.finalUrl || d.requestedUrl, chamber, shotImg);
+    const tools = [replayNode, liveNode].filter(Boolean);
+    const toolsBar = tools.length ? el("div", { class: "chamber-tools" }, tools) : null;
 
     const meta = (k, v) =>
       el("div", { class: "meta" }, [
@@ -217,6 +379,7 @@ async function detonate(url, opts = {}) {
       meta("Domain age", formatAge(d.intel && d.intel.domainAge)),
       meta("Redirects", (d.redirectCount ?? 0) + (d.redirectCount === 1 ? " hop" : " hops")),
       meta("Page title", d.title || "—"),
+      meta("Password trap", trapText(d.credentialTrap)),
     ]);
 
     const traj = el("ul", { class: "traj" });
@@ -261,6 +424,7 @@ async function detonate(url, opts = {}) {
 
     root.replaceChildren(
       chamber,
+      ...(toolsBar ? [toolsBar] : []),
       el("div", { class: "readout" }, [
         grid,
         phishingNode,
