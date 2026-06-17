@@ -7,6 +7,7 @@ import { isBlockedUrl } from "./ssrf.js";
 import { runWithTimeout } from "./timeouts.js";
 import { scanBuffer } from "./pdfScan.js";
 import { checkForPhishing } from "../tools/phishing-detect.js";
+import { closeSearchBrowser } from "../tools/brand-search.js";
 import { readFile, writeFile } from 'fs/promises';
 import path from "path";
 import { fileURLToPath } from "url";
@@ -51,20 +52,24 @@ app.post("/detonate", async (req, res) => {
   const started = Date.now();
   try {
     const report = await detonate(url);
-    const risk = await scoreRisk(report, { analysisLayers });
-    // Brand-detection is enrichment — a failure here must not fail the detonation.
-    let phishing = null;
-    if (analysisLayers.phishingEnrichment) {
-      try {
-        phishing = await runWithTimeout(
-          checkForPhishing(report),
-          PHISHING_ENRICHMENT_TIMEOUT_MS,
-          null
-        );
-      } catch (err) {
-        console.error("phishing check failed (non-fatal):", err.message || err);
-      }
-    }
+
+    // Risk scoring (core) and brand-detection (enrichment) both derive only from
+    // `report`, so run them CONCURRENTLY instead of back-to-back to cut latency.
+    // Brand-detection is best-effort: it's time-bounded and a failure or timeout
+    // resolves to null rather than failing the detonation.
+    const phishingPromise = analysisLayers.phishingEnrichment
+      ? runWithTimeout(checkForPhishing(report), PHISHING_ENRICHMENT_TIMEOUT_MS, null).catch(
+          (err) => {
+            console.error("phishing check failed (non-fatal):", err.message || err);
+            return null;
+          }
+        )
+      : Promise.resolve(null);
+
+    const [risk, phishing] = await Promise.all([
+      scoreRisk(report, { analysisLayers }),
+      phishingPromise,
+    ]);
     console.log("phishing check!! ", phishing);
 
     res.json({
@@ -211,7 +216,7 @@ const server = app.listen(PORT, () => {
 async function shutdown() {
   console.log("\nShutting down...");
   server.close();
-  await closeBrowser();
+  await Promise.all([closeBrowser(), closeSearchBrowser()]);
   process.exit(0);
 }
 process.on("SIGINT", shutdown);
