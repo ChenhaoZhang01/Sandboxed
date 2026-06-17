@@ -1,8 +1,40 @@
-# Deploying the Sandboxed backend to Render
+# Deploying the Sandboxed backend
 
 The backend runs a real headless Chromium (Puppeteer), so it needs a long-running
-container — not a serverless function. It ships a Dockerfile and a Render Blueprint
-(`render.yaml` at the repo root), so you can deploy it straight from GitHub.
+container — not a serverless function. It ships a Dockerfile and works on any
+container host. **Railway is the recommended host** (no idle-sleep / cold starts,
+more RAM than Render's free tier). Render instructions follow as an alternative.
+
+---
+
+# Railway (recommended)
+
+Railway has no cold starts and gives the container enough memory for Chromium, so
+detonations don't time out. It builds from the same Dockerfile via `railway.json`.
+
+## Deploy from Git
+1. Push this repo to GitHub.
+2. https://railway.app → **New Project → Deploy from GitHub repo** → pick this repo.
+3. Open the service → **Settings → Source → Root Directory = `backend`**.
+   (Railway then reads `backend/railway.json` + `backend/Dockerfile`.)
+4. **Settings → Networking → Generate Domain** to get a public URL like
+   `https://sandboxed-backend-production.up.railway.app`.
+5. First build pulls the Puppeteer image + `npm ci` (a few minutes). Railway injects
+   `PORT` automatically; `src/server.js` already reads it.
+
+## After it's live
+- Test: `https://<your-domain>/health` → `{"ok":true,"service":"sandboxed"}`, then POST
+  a detonate (see curl below).
+- Point the clients at the Railway domain: extension Options → API base, and the PWA's
+  API field / the `DEFAULT_API` in `frontend/app.js`.
+
+---
+
+# Render (alternative)
+
+It ships a Render Blueprint (`render.yaml` at the repo root), so you can deploy it
+straight from GitHub. NOTE: Render's free tier sleeps after ~15 min idle and is
+capped at 512 MB RAM, which can make detonations slow or time out.
 
 ## Deploy from Git (Blueprint — recommended)
 1. Push this repo to GitHub (already connected as the `main` branch).
