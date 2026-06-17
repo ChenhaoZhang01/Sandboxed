@@ -7,8 +7,8 @@
 #   fly launch --no-deploy   # first time: creates/links the app from this file
 #   fly deploy               # build the Dockerfile + ship it
 #
-# Rename `app` if "sandboxed-backend" is taken (Fly app names are global).
-app = "sandboxed-backend"
+# Must match the app you created with `fly launch` (shown in the dashboard).
+app = "sandboxed"
 primary_region = "sjc"
 
 [build]
