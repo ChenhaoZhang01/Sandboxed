@@ -38,6 +38,15 @@ function setStatus(state, text) {
   statusText.textContent = text;
 }
 
+function setDetonationProgress(step) {
+  const raw = String((step && (step.message || step.stage)) || "Working");
+  const text = raw.charAt(0).toUpperCase() + raw.slice(1);
+  setStatus("running", text);
+  consoleState.textContent = text;
+  const spinnerText = spinner.querySelector("p");
+  if (spinnerText) spinnerText.textContent = text + "...";
+}
+
 function resetView() {
   errorBox.classList.add("hidden");
   readout.classList.add("hidden");
@@ -58,8 +67,6 @@ function normalize(u) {
   }
 }
 async function detonate(rawUrl) {
-  const verifiedLinks = await fetchVerifiedLinks()
-  console.log(verifiedLinks)
   const url = (rawUrl ?? urlInput.value).trim();
   if (!url) {
     urlInput.focus();
@@ -69,44 +76,29 @@ async function detonate(rawUrl) {
   resetView();
   spinner.classList.remove("hidden");
   goBtn.disabled = true;
-  setStatus("running", "Detonating");
-  consoleState.textContent = "Working";
+  setDetonationProgress({ message: "resolving target" });
 
   try {
+    let verifiedLinks = [];
     if($("historySwitch").checked){
+      try {
+        verifiedLinks = await fetchVerifiedLinks();
+      } catch (err) {
+        console.warn("failed to load scan history:", err.message);
+      }
       const match = verifiedLinks.find(
         (x) => normalize(x.url) === normalize(url)
       );
 
       if (match) {
-        console.log("eee")
         spinner.classList.add("hidden");
         render(match.data);
         return;
       }
     }
-    const res = await fetch(apiBase() + "/detonate", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        url,
-        analysisLayers: {
-          domainAge: $("domainAgeSwitch").checked,
-          safeBrowsing: $("safeBrowsingSwitch").checked,
-          phishingEnrichment: $("phishingSwitch").checked,
-          recordReplay: $("replaySwitch").checked,
-          credentialTrap: $("trapSwitch").checked,
-        },
-      }),
-    });
-
-    const data = await res.json();
+    const analysisLayers = currentAnalysisLayers();
+    const data = await detonateWithProgress(url, analysisLayers);
     spinner.classList.add("hidden");
-
-    if (!res.ok) {
-      showError(data.error || "Detonation failed.");
-      return;
-    }
     // Don't persist the replay frames in the verified-links cache — they're large
     // base64 JPEGs and would bloat the store. Everything else is kept.
     const { replayFrames, ...cacheable } = data;
@@ -122,13 +114,103 @@ async function detonate(rawUrl) {
   } catch (err) {
     spinner.classList.add("hidden");
     showError(
-      "Could not reach the detonation engine at " +
-        apiBase() +
-        ". Is the backend running? " +
-        "(" + err.message + ")"
+      err.userFacing
+        ? err.message
+        : "Could not reach the detonation engine at " +
+            apiBase() +
+            ". Is the backend running? " +
+            "(" + err.message + ")"
     );
   } finally {
     goBtn.disabled = false;
+  }
+}
+
+function currentAnalysisLayers() {
+  return {
+    domainAge: $("domainAgeSwitch").checked,
+    safeBrowsing: $("safeBrowsingSwitch").checked,
+    phishingEnrichment: $("phishingSwitch").checked,
+    recordReplay: $("replaySwitch").checked,
+    credentialTrap: $("trapSwitch").checked,
+  };
+}
+
+async function postDetonate(url, analysisLayers) {
+  const res = await fetch(apiBase() + "/detonate", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ url, analysisLayers }),
+  });
+
+  const data = await res.json();
+  if (!res.ok) {
+    const err = new Error(data.error || "Detonation failed.");
+    err.userFacing = true;
+    throw err;
+  }
+  return data;
+}
+
+function streamDetonate(url, analysisLayers) {
+  return new Promise((resolve, reject) => {
+    const params = new URLSearchParams({
+      url,
+      analysisLayers: JSON.stringify(analysisLayers),
+    });
+    const source = new EventSource(apiBase() + "/detonate/stream?" + params.toString());
+    let settled = false;
+
+    const finish = (fn, value) => {
+      if (settled) return;
+      settled = true;
+      source.close();
+      fn(value);
+    };
+
+    source.addEventListener("progress", (ev) => {
+      try {
+        setDetonationProgress(JSON.parse(ev.data));
+      } catch {}
+    });
+
+    source.addEventListener("result", (ev) => {
+      try {
+        finish(resolve, JSON.parse(ev.data));
+      } catch (err) {
+        finish(reject, err);
+      }
+    });
+
+    source.addEventListener("scan-error", (ev) => {
+      let message = "Detonation failed.";
+      try {
+        const data = JSON.parse(ev.data);
+        message = data.error || message;
+      } catch {}
+      const err = new Error(message);
+      err.scanError = true;
+      err.userFacing = true;
+      finish(reject, err);
+    });
+
+    source.onerror = () => {
+      if (!settled) finish(reject, new Error("Live progress stream failed."));
+    };
+  });
+}
+
+async function detonateWithProgress(url, analysisLayers) {
+  if (!("EventSource" in window)) {
+    return postDetonate(url, analysisLayers);
+  }
+
+  try {
+    return await streamDetonate(url, analysisLayers);
+  } catch (err) {
+    if (err.scanError) throw err;
+    setDetonationProgress({ message: "retrying without live progress" });
+    return postDetonate(url, analysisLayers);
   }
 }
 

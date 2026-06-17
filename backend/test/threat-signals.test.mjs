@@ -7,6 +7,7 @@ import {
   auditThirdPartyTrackers,
   classifySignalThreats,
   detectSurveyGiveawayScam,
+  detectTechSupportScam,
   detectTyposquat,
   inspectTlsSecurity,
 } from "../src/threatSignals.js";
@@ -16,6 +17,22 @@ test("detectSurveyGiveawayScam catches giveaway language", () => {
     suspicious: true,
     matchedTerms: ["you won", "free gift card", "claim now"],
   });
+});
+
+test("detectTechSupportScam catches fake virus support-lock patterns", () => {
+  const findings = detectTechSupportScam({
+    text: "Critical security alert. Virus detected. Do not close this window. Call Microsoft Support at 800-555-1212.",
+    runtime: {
+      fullscreenRequests: 1,
+      dialogCalls: 2,
+      exitLockHooks: 1,
+    },
+  });
+
+  assert.equal(findings.suspicious, true);
+  assert.ok(findings.matchedTerms.includes("virus detected"));
+  assert.deepEqual(findings.phoneNumbers, ["800-555-1212"]);
+  assert.equal(findings.fullscreenRequests, 1);
 });
 
 test("auditThirdPartyTrackers counts third-party trackers and cookies", () => {
@@ -81,6 +98,31 @@ test("classifySignalThreats penalizes wallet-drainer, clipboard, and typosquat p
   assert.ok(summary.reasons.some((item) => /wallet provider/i.test(item.reason)));
   assert.ok(summary.reasons.some((item) => /clipboard/i.test(item.reason)));
   assert.ok(summary.reasons.some((item) => /typosquat/i.test(item.reason)));
+});
+
+test("classifySignalThreats penalizes tech-support scams and webdriver sandbox probes", () => {
+  const summary = classifySignalThreats({
+    techSupportScam: {
+      suspicious: true,
+      matchedTerms: ["security alert", "call support", "do not close"],
+      phoneNumbers: ["800-555-1212"],
+      fullscreenRequests: 1,
+      dialogCalls: 3,
+      exitLockHooks: 1,
+    },
+    runtime: {
+      fullscreenRequests: 1,
+      dialogCalls: 3,
+      exitLockHooks: 1,
+      sandboxProbes: 2,
+      sandboxProbeProperties: ["navigator.webdriver"],
+    },
+  });
+
+  assert.ok(summary.score >= 60);
+  assert.ok(summary.reasons.some((item) => /tech-support scam/i.test(item.reason)));
+  assert.ok(summary.reasons.some((item) => /navigator\.webdriver/i.test(item.reason)));
+  assert.ok(summary.reasons.some((item) => /fullscreen/i.test(item.reason)));
 });
 
 test("scoreRisk incorporates the new runtime and TLS threat signals", async () => {

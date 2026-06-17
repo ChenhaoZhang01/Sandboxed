@@ -41,6 +41,46 @@ app.use(express.json({ limit: "256kb" }));
 
 app.get("/health", (_req, res) => res.json({ ok: true, service: "sandboxed" }));
 
+app.get("/detonate/stream", async (req, res) => {
+  writeSseHeaders(res);
+
+  let closed = false;
+  const heartbeat = setInterval(() => {
+    if (!closed) res.write(": keepalive\n\n");
+  }, 15000);
+
+  req.on("close", () => {
+    closed = true;
+    clearInterval(heartbeat);
+  });
+
+  const send = (event, data) => {
+    if (closed) return;
+    res.write(`event: ${event}\n`);
+    res.write(`data: ${JSON.stringify(data)}\n\n`);
+  };
+
+  try {
+    const raw = String(req.query?.url || "").trim();
+    const analysisLayers = parseAnalysisLayersQuery(req.query || {});
+    const result = await runDetonation(raw, analysisLayers, (progress) => {
+      send("progress", progress);
+    });
+    send("result", result);
+    send("done", { ok: true });
+  } catch (err) {
+    console.error("streamed detonation failed:", err);
+    send("scan-error", {
+      error: err.publicMessage || "Detonation failed",
+      detail: String(err.message || err),
+    });
+  } finally {
+    closed = true;
+    clearInterval(heartbeat);
+    res.end();
+  }
+});
+
 /**
  * POST /detonate  { "url": "https://..." }
  * Opens the URL in a sandboxed headless browser, follows redirects,
@@ -48,66 +88,13 @@ app.get("/health", (_req, res) => res.json({ ok: true, service: "sandboxed" }));
  */
 app.post("/detonate", async (req, res) => {
   const raw = (req.body && req.body.url ? String(req.body.url) : "").trim();
-  const url = await resolveTarget(raw);
-  const analysisLayers = resolveAnalysisLayers(req.body?.analysisLayers);
-
-  if (!url) {
-    return res
-      .status(400)
-      .json({ error: "Provide a valid, public http(s) url in { url }" });
-  }
-
-  const started = Date.now();
   try {
-    const report = await detonate(url, {
-      recordReplay: analysisLayers.recordReplay,
-      credentialTrap: analysisLayers.credentialTrap,
-    });
-
-    // Risk scoring (core) and brand-detection (enrichment) both derive only from
-    // `report`, so run them CONCURRENTLY instead of back-to-back to cut latency.
-    // Brand-detection is best-effort: it's time-bounded and a failure or timeout
-    // resolves to null rather than failing the detonation.
-    const phishingPromise = analysisLayers.phishingEnrichment
-      ? runWithTimeout(checkForPhishing(report), PHISHING_ENRICHMENT_TIMEOUT_MS, null).catch(
-          (err) => {
-            console.error("phishing check failed (non-fatal):", err.message || err);
-            return null;
-          }
-        )
-      : Promise.resolve(null);
-
-    const [risk, phishing] = await Promise.all([
-      scoreRisk(report, { analysisLayers }),
-      phishingPromise,
-    ]);
-    console.log("phishing check!! ", phishing);
-
-    res.json({
-      verdict: risk.verdict,
-      score: risk.score,
-      reasons: risk.reasons,
-      requestedUrl: report.requestedUrl,
-      finalUrl: report.finalUrl,
-      finalHost: report.signals?.finalHost || null,
-      redirectChain: report.redirectChain,
-      redirectCount: report.redirectCount,
-      title: report.title,
-      favicon: report.favicon,
-      h1s: report.h1s,
-      signals: report.signals,
-      intel: risk.intel,
-      downloads: report.downloads,
-      blockedRequests: report.blockedRequests,
-      screenshotBase64: report.screenshotBase64,
-      replayFrames: report.replayFrames,
-      credentialTrap: report.credentialTrap,
-      elapsedMs: Date.now() - started,
-      phishing,
-    });
+    res.json(await runDetonation(raw, req.body?.analysisLayers));
   } catch (err) {
     console.error("detonation failed:", err);
-    res.status(500).json({ error: "Detonation failed", detail: String(err.message || err) });
+    res
+      .status(err.statusCode || 500)
+      .json({ error: err.publicMessage || "Detonation failed", detail: String(err.message || err) });
   }
 });
 
@@ -227,6 +214,126 @@ app.post(
     }
   }
 );
+
+function writeSseHeaders(res) {
+  res.status(200);
+  res.setHeader("Content-Type", "text/event-stream; charset=utf-8");
+  res.setHeader("Cache-Control", "no-cache, no-transform");
+  res.setHeader("Connection", "keep-alive");
+  res.setHeader("X-Accel-Buffering", "no");
+  if (typeof res.flushHeaders === "function") res.flushHeaders();
+}
+
+function parseBoolean(value) {
+  if (value == null) return undefined;
+  const normalized = String(Array.isArray(value) ? value[0] : value).trim().toLowerCase();
+  if (["1", "true", "yes", "on"].includes(normalized)) return true;
+  if (["0", "false", "no", "off"].includes(normalized)) return false;
+  return undefined;
+}
+
+function parseAnalysisLayersQuery(query) {
+  let parsed = {};
+  if (typeof query.analysisLayers === "string") {
+    try {
+      const value = JSON.parse(query.analysisLayers);
+      if (value && typeof value === "object") parsed = value;
+    } catch {
+      parsed = {};
+    }
+  }
+
+  for (const key of [
+    "domainAge",
+    "safeBrowsing",
+    "phishingEnrichment",
+    "downloadsAsHardDanger",
+    "recordReplay",
+    "credentialTrap",
+  ]) {
+    const value = parseBoolean(query[key]);
+    if (typeof value === "boolean") parsed[key] = value;
+  }
+
+  return parsed;
+}
+
+function requestError(message, statusCode = 400) {
+  const err = new Error(message);
+  err.statusCode = statusCode;
+  err.publicMessage = message;
+  return err;
+}
+
+function emitProgress(onProgress, stage, message, extra = {}) {
+  if (typeof onProgress !== "function") return;
+  onProgress({ stage, message, ...extra, ts: Date.now() });
+}
+
+async function runDetonation(raw, analysisLayerInput, onProgress) {
+  emitProgress(onProgress, "resolving", "resolving target");
+  const url = await resolveTarget(raw);
+  const analysisLayers = resolveAnalysisLayers(analysisLayerInput);
+
+  if (!url) {
+    throw requestError("Provide a valid, public http(s) url in { url }");
+  }
+
+  const started = Date.now();
+  const report = await detonate(url, {
+    recordReplay: analysisLayers.recordReplay,
+    credentialTrap: analysisLayers.credentialTrap,
+    onProgress,
+  });
+
+  // Risk scoring (core) and brand-detection (enrichment) both derive only from
+  // `report`, so run them CONCURRENTLY instead of back-to-back to cut latency.
+  // Brand-detection is best-effort: it's time-bounded and a failure or timeout
+  // resolves to null rather than failing the detonation.
+  emitProgress(onProgress, "scoring", "scoring");
+  const phishingPromise = analysisLayers.phishingEnrichment
+    ? runWithTimeout(checkForPhishing(report), PHISHING_ENRICHMENT_TIMEOUT_MS, null).catch(
+        (err) => {
+          console.error("phishing check failed (non-fatal):", err.message || err);
+          return null;
+        }
+      )
+    : Promise.resolve(null);
+
+  const [risk, phishing] = await Promise.all([
+    scoreRisk(report, { analysisLayers }),
+    phishingPromise,
+  ]);
+
+  const result = {
+    verdict: risk.verdict,
+    score: risk.score,
+    reasons: risk.reasons,
+    requestedUrl: report.requestedUrl,
+    finalUrl: report.finalUrl,
+    finalHost: report.signals?.finalHost || null,
+    redirectChain: report.redirectChain,
+    redirectCount: report.redirectCount,
+    title: report.title,
+    favicon: report.favicon,
+    h1s: report.h1s,
+    signals: report.signals,
+    intel: risk.intel,
+    downloads: report.downloads,
+    blockedRequests: report.blockedRequests,
+    screenshotBase64: report.screenshotBase64,
+    replayFrames: report.replayFrames,
+    credentialTrap: report.credentialTrap,
+    elapsedMs: Date.now() - started,
+    phishing,
+  };
+
+  emitProgress(onProgress, "complete", "complete", {
+    verdict: result.verdict,
+    score: result.score,
+  });
+  return result;
+}
 
 
 async function getVerifiedLinks() {

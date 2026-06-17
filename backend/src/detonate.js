@@ -1,6 +1,6 @@
 import puppeteer from "puppeteer";
 import { isBlockedUrl, isBlockedLiteral } from "./ssrf.js";
-import { detectTyposquat, inspectTlsSecurity } from "./threatSignals.js";
+import { detectTechSupportScam, detectTyposquat, inspectTlsSecurity } from "./threatSignals.js";
 import { makeCanary, fillCredentialForm, matchCanaryHit } from "./credentialTrap.js";
 
 const DETONATE_TIMEOUT_MS = Number(process.env.DETONATE_TIMEOUT_MS || 30000);
@@ -76,10 +76,16 @@ async function installThreatHooks(page) {
     const tracker = window.__sandboxedThreatSignals || (window.__sandboxedThreatSignals = {
       clipboardWrites: 0,
       clipboardSamples: [],
+      dialogCalls: 0,
+      dialogSamples: [],
       evalCalls: 0,
+      exitLockHooks: 0,
       functionCtorCalls: 0,
+      fullscreenRequests: 0,
       keystrokeHooks: 0,
       popunderAttempts: 0,
+      sandboxProbes: 0,
+      sandboxProbeProperties: [],
       walletCalls: 0,
       walletProviders: [],
     });
@@ -92,11 +98,24 @@ async function installThreatHooks(page) {
       if (!tracker.walletProviders.includes(name)) tracker.walletProviders.push(name);
     };
 
+    const markSandboxProbe = (name) => {
+      if (!tracker.sandboxProbeProperties.includes(name)) {
+        tracker.sandboxProbeProperties.push(name);
+      }
+    };
+
     const recordClipboardText = (value) => {
       const text = String(value || "");
       tracker.clipboardWrites = (tracker.clipboardWrites || 0) + 1;
       if (text) tracker.clipboardSamples.push(text.slice(0, 160));
       if (tracker.clipboardSamples.length > 8) tracker.clipboardSamples.shift();
+    };
+
+    const recordDialog = (type, value) => {
+      const text = String(value || "");
+      tracker.dialogCalls = (tracker.dialogCalls || 0) + 1;
+      tracker.dialogSamples.push({ type, text: text.slice(0, 220) });
+      if (tracker.dialogSamples.length > 8) tracker.dialogSamples.shift();
     };
 
     const wrapWalletProvider = (name, provider) => {
@@ -121,6 +140,33 @@ async function installThreatHooks(page) {
     } catch {}
 
     try {
+      const originalAlert = window.alert.bind(window);
+      window.alert = (message) => {
+        recordDialog("alert", message);
+        return undefined;
+      };
+      window.alert.__sandboxedOriginal = originalAlert;
+    } catch {}
+
+    try {
+      const originalConfirm = window.confirm.bind(window);
+      window.confirm = (message) => {
+        recordDialog("confirm", message);
+        return false;
+      };
+      window.confirm.__sandboxedOriginal = originalConfirm;
+    } catch {}
+
+    try {
+      const originalPrompt = window.prompt.bind(window);
+      window.prompt = (message) => {
+        recordDialog("prompt", message);
+        return null;
+      };
+      window.prompt.__sandboxedOriginal = originalPrompt;
+    } catch {}
+
+    try {
       const originalEval = window.eval.bind(window);
       window.eval = (...args) => {
         bump("evalCalls");
@@ -140,11 +186,42 @@ async function installThreatHooks(page) {
     try {
       const originalAddEventListener = EventTarget.prototype.addEventListener;
       EventTarget.prototype.addEventListener = function (type, listener, options) {
-        if (/key|keyup|keydown|keypress|input|paste|clipboard/i.test(String(type))) {
+        const eventType = String(type);
+        if (/key|keyup|keydown|keypress|input|paste|clipboard/i.test(eventType)) {
           bump("keystrokeHooks");
+        }
+        if (/beforeunload|unload|popstate|hashchange/i.test(eventType)) {
+          bump("exitLockHooks");
         }
         return originalAddEventListener.call(this, type, listener, options);
       };
+    } catch {}
+
+    try {
+      const wrapFullscreen = (proto) => {
+        if (!proto || typeof proto.requestFullscreen !== "function") return;
+        const originalRequestFullscreen = proto.requestFullscreen;
+        proto.requestFullscreen = function (...args) {
+          bump("fullscreenRequests");
+          return originalRequestFullscreen.apply(this, args);
+        };
+      };
+      wrapFullscreen(Element.prototype);
+    } catch {}
+
+    try {
+      const desc = Object.getOwnPropertyDescriptor(Navigator.prototype, "webdriver");
+      if (desc && desc.configurable !== false) {
+        Object.defineProperty(Navigator.prototype, "webdriver", {
+          configurable: true,
+          enumerable: desc.enumerable,
+          get() {
+            bump("sandboxProbes");
+            markSandboxProbe("navigator.webdriver");
+            return desc.get ? desc.get.call(this) : desc.value;
+          },
+        });
+      }
     } catch {}
 
     try {
@@ -198,6 +275,17 @@ async function installThreatHooks(page) {
 export async function detonate(targetUrl, options = {}) {
   const recordReplay = options.recordReplay !== false; // default on
   const credentialTrapEnabled = options.credentialTrap === true; // opt-in
+  const startedAt = Date.now();
+  const onProgress = typeof options.onProgress === "function" ? options.onProgress : () => {};
+  const emitProgress = (stage, message, extra = {}) => {
+    try {
+      onProgress({ stage, message, elapsedMs: Date.now() - startedAt, ...extra });
+    } catch {
+      /* progress observers are best-effort */
+    }
+  };
+
+  emitProgress("launching", "launching sandbox");
   const browser = await getBrowser();
   // Incognito context = clean cookies/storage per detonation (sandbox-ish).
   const context = await browser.createBrowserContext();
@@ -220,6 +308,7 @@ export async function detonate(targetUrl, options = {}) {
   const replayStarted = Date.now();
 
   try {
+    emitProgress("instrumenting", "installing safety hooks");
     await installThreatHooks(page);
 
     await page.setUserAgent(USER_AGENT);
@@ -278,6 +367,11 @@ export async function detonate(targetUrl, options = {}) {
 
         if (isNav && url !== "about:blank") {
           redirectChain.push(url);
+          emitProgress("redirect", `redirect ${redirectChain.length}/${MAX_REDIRECTS}`, {
+            index: redirectChain.length,
+            max: MAX_REDIRECTS,
+            url,
+          });
           if (redirectChain.length > MAX_REDIRECTS) {
             return await req.abort("failed");
           }
@@ -310,6 +404,7 @@ export async function detonate(targetUrl, options = {}) {
 
     let response = null;
     try {
+      emitProgress("navigating", "opening target");
       response = await page.goto(targetUrl, {
         waitUntil: "domcontentloaded",
         timeout: DETONATE_TIMEOUT_MS,
@@ -322,10 +417,11 @@ export async function detonate(targetUrl, options = {}) {
 
     const finalUrl = page.url();
 
+    emitProgress("extracting", "extracting page signals");
     const pageMeta = await extractPageData(page);
     const runtimeSignals = await collectRuntimeSignals(page);
     const tlsSignals = await inspectTls(page, finalUrl);
-    const signalData = await extractSignals(page, finalUrl);
+    const signalData = await extractSignals(page, finalUrl, runtimeSignals);
     const cookieNames = (await page.cookies().catch(() => [])).map((cookie) => cookie.name);
     const signals = {
       ...signalData,
@@ -337,6 +433,7 @@ export async function detonate(targetUrl, options = {}) {
 
     // Give heavy / animated pages a brief moment to settle before capturing
     // the final screenshot (helps with loading-overlay pages like x.com).
+    emitProgress("screenshotting", "screenshotting");
     if (SCREENSHOT_DELAY_MS > 0) {
       await new Promise((resolve) => setTimeout(resolve, SCREENSHOT_DELAY_MS));
     }
@@ -357,6 +454,7 @@ export async function detonate(targetUrl, options = {}) {
     // briefly for the request handler to catch (and abort) the outbound submission.
     let credentialTrap = null;
     if (credentialTrapEnabled && signals.passwordFields > 0) {
+      emitProgress("credential-trap", "checking credential trap");
       trapFinalHost = signals.finalHost || "";
       trapArmed = true;
       const attempted = await fillCredentialForm(page, canary);
@@ -416,7 +514,7 @@ function dedupeChain(chain, finalUrl) {
 /**
  * Run inside the page to collect phishing-relevant DOM signals.
  */
-async function extractSignals(page, finalUrl) {
+async function extractSignals(page, finalUrl, runtimeSignals = {}) {
   let finalHost = "";
   try {
     finalHost = new URL(finalUrl).hostname.replace(/^www\./, "");
@@ -523,6 +621,10 @@ async function extractSignals(page, finalUrl) {
     metaRefresh: dom.metaRefresh,
     externalScriptCount: dom.externalScriptCount,
     brandImpersonation: brandMentions,
+    techSupportScam: detectTechSupportScam({
+      text: `${dom.titleText} ${dom.headingText} ${dom.bodyText}`,
+      runtime: runtimeSignals,
+    }),
   };
 }
 
@@ -531,11 +633,17 @@ async function collectRuntimeSignals(page) {
   try {
     return await page.evaluate(() => ({
       ...(window.__sandboxedThreatSignals || {}),
+      sandboxProbeProperties: Array.isArray(window.__sandboxedThreatSignals?.sandboxProbeProperties)
+        ? [...window.__sandboxedThreatSignals.sandboxProbeProperties]
+        : [],
       walletProviders: Array.isArray(window.__sandboxedThreatSignals?.walletProviders)
         ? [...window.__sandboxedThreatSignals.walletProviders]
         : [],
       clipboardSamples: Array.isArray(window.__sandboxedThreatSignals?.clipboardSamples)
         ? [...window.__sandboxedThreatSignals.clipboardSamples]
+        : [],
+      dialogSamples: Array.isArray(window.__sandboxedThreatSignals?.dialogSamples)
+        ? [...window.__sandboxedThreatSignals.dialogSamples]
         : [],
     }));
   } catch {
