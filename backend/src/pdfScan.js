@@ -1,0 +1,58 @@
+import { writeFile, unlink } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { randomUUID } from "node:crypto";
+import path from "node:path";
+import NodeClam from "clamscan";
+
+const CLAMD_SOCKET = process.env.CLAMD_SOCKET || "/var/run/clamav/clamd.ctl";
+const CLAMD_HOST = process.env.CLAMD_HOST || "";
+const CLAMD_PORT = Number(process.env.CLAMD_PORT || 3310);
+const CLAM_INIT_TIMEOUT_MS = Number(process.env.CLAM_INIT_TIMEOUT_MS || 5000);
+
+let clamscanPromise = null;
+
+async function getClamscan() {
+  if (!clamscanPromise) {
+    clamscanPromise = new NodeClam()
+      .init({
+        removeInfected: false,
+        clamdscan: {
+          socket: CLAMD_HOST ? false : CLAMD_SOCKET,
+          host: CLAMD_HOST || false,
+          port: CLAMD_HOST ? CLAMD_PORT : false,
+          timeout: CLAM_INIT_TIMEOUT_MS,
+          localFallback: false,
+        },
+        preference: "clamdscan",
+      })
+      .catch((err) => {
+        console.error("ClamAV init failed (scanning will be unavailable):", err.message || err);
+        clamscanPromise = null; // allow retry on a later call once clamd is back
+        return null;
+      });
+  }
+  return clamscanPromise;
+}
+
+/**
+ * @param {Buffer} buffer
+ * @returns {Promise<{status: "clean"|"infected"|"unavailable"|"error", viruses?: string[], message?: string}>}
+ */
+export async function scanBuffer(buffer) {
+  const clamscan = await getClamscan();
+  if (!clamscan) {
+    return { status: "unavailable", message: "ClamAV daemon is not reachable." };
+  }
+
+  const tempPath = path.join(tmpdir(), `sandboxer-${randomUUID()}.pdf`);
+  try {
+    await writeFile(tempPath, buffer);
+    const { isInfected, viruses } = await clamscan.isInfected(tempPath);
+    return isInfected ? { status: "infected", viruses: viruses || [] } : { status: "clean" };
+  } catch (err) {
+    console.error("ClamAV scan failed:", err.message || err);
+    return { status: "error", message: String(err.message || err) };
+  } finally {
+    await unlink(tempPath).catch(() => {});
+  }
+}

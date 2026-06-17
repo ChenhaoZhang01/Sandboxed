@@ -4,7 +4,9 @@ import cors from "cors";
 import { detonate, closeBrowser } from "./detonate.js";
 import { scoreRisk } from "./risk.js";
 import { isBlockedUrl } from "./ssrf.js";
+import { scanBuffer } from "./pdfScan.js";
 import { checkForPhishing } from "../tools/phishing-detect.js";
+
 
 const app = express();
 const PORT = Number(process.env.PORT || 8787);
@@ -62,6 +64,34 @@ app.post("/detonate", async (req, res) => {
   }
 });
 
+const PDF_SCAN_LIMIT = `${Number(process.env.PDF_SCAN_MAX_MB || 20)}mb`;
+
+/**
+ * POST /scan-pdf
+ * Body: raw PDF bytes, Content-Type: application/pdf
+ * ClamAV being unreachable is not a request error — always responds 200
+ * with a status field in that case; only bad input is a 4xx.
+ */
+app.post(
+  "/scan-pdf",
+  express.raw({ type: "application/pdf", limit: PDF_SCAN_LIMIT }),
+  async (req, res) => {
+    if (!Buffer.isBuffer(req.body) || req.body.length === 0) {
+      return res.status(400).json({ error: "Provide raw PDF bytes with Content-Type: application/pdf" });
+    }
+    if (req.body.subarray(0, 5).toString("latin1") !== "%PDF-") {
+      return res.status(400).json({ error: "Payload is not a valid PDF (missing %PDF- header)" });
+    }
+
+    try {
+      res.json(await scanBuffer(req.body));
+    } catch (err) {
+      console.error("scan-pdf failed:", err);
+      res.status(500).json({ status: "error", message: String(err.message || err) });
+    }
+  }
+);
+
 async function resolveTarget(input) {
   if (!input) return null;
   let candidate = input;
@@ -83,6 +113,7 @@ async function resolveTarget(input) {
 const server = app.listen(PORT, () => {
   console.log(`Sandboxed detonation engine listening on http://localhost:${PORT}`);
   console.log(`  POST /detonate { "url": "..." }`);
+  console.log(`  POST /scan-pdf  (raw PDF bytes, Content-Type: application/pdf)`);
 });
 
 async function shutdown() {
