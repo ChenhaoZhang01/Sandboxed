@@ -9,15 +9,31 @@ const SBX = (() => {
     // How links get checked: "manual" (right-click only),
     // "click" (intercept clicks), or "both".
     checkMode: "manual",
+    analysisLayers: {
+      domainAge: true,
+      safeBrowsing: true,
+      phishingEnrichment: false,
+    },
+    historyEnabled: true,
   };
 
   // --- settings (persist across browser restarts via chrome.storage.sync) ---
+  function normalizeAnalysisLayers(layers = {}) {
+    return {
+      domainAge: layers.domainAge !== false,
+      safeBrowsing: layers.safeBrowsing !== false,
+      phishingEnrichment: layers.phishingEnrichment === true,
+    };
+  }
+
   function getSettings() {
     return new Promise((resolve) =>
       chrome.storage.sync.get(DEFAULTS, (o) =>
         resolve({
           apiBase: (o.apiBase || DEFAULTS.apiBase).replace(/\/$/, ""),
           checkMode: o.checkMode || DEFAULTS.checkMode,
+          historyEnabled: o.historyEnabled ?? true,
+          analysisLayers: normalizeAnalysisLayers(o.analysisLayers),
         })
       )
     );
@@ -30,21 +46,13 @@ const SBX = (() => {
   }
 
 async function detonate(url, opts = {}) {
-  const base = await getApiBase();
+  const settings = await getSettings();
+  const base = settings.apiBase;
+  const analysisLayers = normalizeAnalysisLayers(opts.analysisLayers || settings.analysisLayers);
   const timeoutMs = opts.timeoutMs ?? 25000;
 
   const controller = new AbortController();
   const t = setTimeout(() => controller.abort(), timeoutMs);
-
-  try {
-    let verifiedLinks = [];
-    try {
-      const vres = await fetch(base + "/verified-links");
-      const vdata = await vres.json();
-      verifiedLinks = Array.isArray(vdata?.data) ? vdata.data : [];
-    } catch {
-      verifiedLinks = [];
-    }
 
     const normalize = (u) => {
       try {
@@ -59,20 +67,28 @@ async function detonate(url, opts = {}) {
       }
     };
 
-    const match = verifiedLinks.find(
-      (x) => normalize(x.url) === normalize(url)
-    );
+  try {
+    if (settings.historyEnabled) {
+      let verifiedLinks = [];
+      try {
+        const vres = await fetch(base + "/verified-links");
+        const vdata = await vres.json();
+        verifiedLinks = Array.isArray(vdata?.data) ? vdata.data : [];
+      } catch {}
 
-    // 3. shortcut: already verified
-    if (match) {
-      console.log("in verified links!");
-      return match.data;
+      const match = verifiedLinks.find(
+        (x) => normalize(x.url) === normalize(url)
+      );
+
+      if (match) {
+        return match.data;
+      }
     }
 
     const res = await fetch(base + "/detonate", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ url }),
+      body: JSON.stringify({ url, analysisLayers }),
       signal: controller.signal,
     });
 

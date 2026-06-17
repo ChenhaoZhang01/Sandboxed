@@ -894,6 +894,64 @@ a {
   width: 100%;
   height: 100%;
   margin: 0;
+}.switch {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 10px; /* space between switch and text */
+  width: auto; /* important: don't restrict to 60px */
+  height: 34px;
+}
+
+/* text label */
+.switch-label {
+  font-size: 14px;
+  user-select: none;
+}
+
+/* keep switch box same */
+.switch input {
+  opacity: 0;
+  width: 0;
+  height: 0;
+}
+
+.slider {
+  position: relative; /* changed from absolute */
+  cursor: pointer;
+  width: 60px;
+  height: 34px;
+  background-color: #ccc;
+  transition: .4s;
+}
+
+.slider:before {
+  position: absolute;
+  content: "";
+  height: 26px;
+  width: 26px;
+  left: 4px;
+  bottom: 4px;
+  background-color: white;
+  transition: .4s;
+}
+
+/* checked state still works */
+input:checked + .slider {
+  background-color: #2196F3;
+}
+
+input:checked + .slider:before {
+  transform: translateX(26px);
+}
+
+/* rounded */
+.slider.round {
+  border-radius: 34px;
+}
+
+.slider.round:before {
+  border-radius: 50%;
 }
 
 /* ---------- animations ---------- */

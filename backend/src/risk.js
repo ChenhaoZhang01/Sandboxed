@@ -1,5 +1,8 @@
 import { getDomainAge } from "./intel/rdap.js";
 import { checkSafeBrowsing } from "./intel/safeBrowsing.js";
+import { isTrustedDomain } from "./intel/trustedDomains.js";
+import { isVerifiedHost } from "./intel/verifiedLinks.js";
+import { classifySignalThreats } from "./threatSignals.js";
 
 // Weighted scoring. Each rule contributes points + a human-readable reason.
 // 0–24 safe, 25–59 suspicious, 60+ dangerous.
@@ -7,11 +10,18 @@ const THRESHOLDS = { suspicious: 25, dangerous: 60 };
 
 /**
  * Turn a raw detonation report into a risk verdict.
- * Enriches with domain age (RDAP) + Safe Browsing (if key present).
+ * Enriches with domain age (RDAP) + Safe Browsing unless the user disables
+ * those optional layers.
  */
-export async function scoreRisk(report) {
+export async function scoreRisk(report, options = {}) {
   const reasons = [];
   let score = 0;
+  const analysisLayers = options.analysisLayers || {};
+  const includeDomainAge = analysisLayers.domainAge !== false;
+  const includeSafeBrowsing = analysisLayers.safeBrowsing !== false;
+  // Whether an auto-download blocks the trusted-domain clamp. Default true
+  // (cautious); set false to trust downloads served from allowlisted/verified hosts.
+  const downloadsAsHardDanger = analysisLayers.downloadsAsHardDanger !== false;
 
   const add = (points, reason) => {
     score += points;
@@ -20,14 +30,20 @@ export async function scoreRisk(report) {
 
   const s = report.signals || {};
   const host = s.finalHost || "";
+  const runtimeThreatSummary = classifySignalThreats(s);
+
+  score += runtimeThreatSummary.score;
+  reasons.push(...runtimeThreatSummary.reasons);
 
   // --- Threat intelligence ---
   const [domainAge, safeBrowsing] = await Promise.all([
-    getDomainAge(host),
-    checkSafeBrowsing(report.finalUrl || report.requestedUrl),
+    includeDomainAge ? getDomainAge(host) : Promise.resolve({ skipped: true }),
+    includeSafeBrowsing
+      ? checkSafeBrowsing(report.finalUrl || report.requestedUrl)
+      : Promise.resolve({ skipped: true }),
   ]);
 
-  if (safeBrowsing.listed) {
+  if (!safeBrowsing.skipped && safeBrowsing.listed) {
     add(60, `Google Safe Browsing flagged this URL: ${safeBrowsing.threats.join(", ")}`);
   }
 
@@ -82,6 +98,43 @@ export async function scoreRisk(report) {
     if (proto === "http:") add(10, "Final page served over insecure HTTP");
   } catch {
     /* ignore */
+  }
+
+  // --- Common-sense / false-positive gate --------------------------------
+  // A login page or redirect on a legitimate site (e.g. mail.google.com) is
+  // expected behaviour, not phishing. Three legitimacy signals, weakest first.
+  const flaggedBySafeBrowsing = !safeBrowsing.skipped && safeBrowsing.listed;
+
+  // #3 — positive use of intel: a long-established, unflagged domain is less
+  // likely hostile, so credit it. A credit (not a clamp) keeps real phishing on
+  // aged/parked domains scoreable.
+  const wellAged = typeof domainAge.ageDays === "number" && domainAge.ageDays >= 365;
+  if (wellAged && !flaggedBySafeBrowsing) {
+    add(-15, `Domain is well-established (${domainAge.ageDays} days) with no Safe Browsing hits`);
+  }
+  if (score < 0) score = 0;
+
+  // Hard evidence of compromise — never suppressed, even on a trusted domain
+  // (covers hijacked legit sites / open redirects / subdomain takeover).
+  const hardDanger =
+    flaggedBySafeBrowsing ||
+    (report.blockedRequests && report.blockedRequests.length > 0) ||
+    (downloadsAsHardDanger && report.downloads && report.downloads.length > 0) ||
+    s.crossDomainCredPost;
+
+  // #1 allowlist + #2 user-verified: strong trust → clamp the verdict to safe
+  // (unless hard danger above), discounting the benign login/redirect signals.
+  const onAllowlist = isTrustedDomain(host);
+  const userVerified = await isVerifiedHost(host);
+  if (!hardDanger && (onAllowlist || userVerified)) {
+    const why = onAllowlist
+      ? `${host} is a recognized legitimate domain`
+      : `${host} was previously verified by the user`;
+    score = Math.min(score, THRESHOLDS.suspicious - 1);
+    reasons.unshift({
+      points: 0,
+      reason: `Common-sense check: ${why}; benign login/redirect signals discounted`,
+    });
   }
 
   const verdict =

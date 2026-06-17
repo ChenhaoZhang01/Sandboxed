@@ -5,12 +5,16 @@
     <title>Sandboxed — settings</title>
     <link rel="stylesheet" href="ui.css" />
   </head>
+
   <body class="popup">
     <div class="sbx-head">
       <span class="glyph" aria-hidden="true"></span>
       <span class="name">Sandboxed Settings</span>
     </div>
+
     <div class="sbx-body">
+
+      <!-- API -->
       <label class="opt-field" for="api">Detonation engine URL</label>
       <input
         id="api"
@@ -19,32 +23,90 @@
         spellcheck="false"
         autocomplete="off"
       />
+
       <p class="hint">
-        Point this at your backend — the default hosted endpoint is
-        <b>https://sandboxed.fly.dev</b>, or swap in your own local/dev URL if needed.
+        Point this at your backend — default is <b>https://sandboxed.fly.dev</b>
       </p>
 
+      <!-- MODE -->
       <label class="opt-field">When should links be checked?</label>
+
       <div class="modes">
         <label class="mode-opt">
           <input type="radio" name="mode" value="manual" />
-          <span><b>Manually</b> — only when I right-click → “Check this link”</span>
+          <span><b>Manually</b> — right-click only</span>
         </label>
+
         <label class="mode-opt">
           <input type="radio" name="mode" value="click" />
-          <span><b>On click</b> — check every link automatically before it opens</span>
+          <span><b>On click</b> — auto-check links</span>
         </label>
+
         <label class="mode-opt">
           <input type="radio" name="mode" value="both" />
-          <span><b>Both</b> — auto-check on click <i>and</i> the right-click option</span>
+          <span><b>Both</b> — auto + right-click</span>
         </label>
       </div>
 
+      <!-- TOGGLES -->
+      <label class="opt-field">Optional analysis layers</label>
+
+      <div class="toggle-list">
+
+        <label class="switch-row">
+          <span class="switch-label">
+            <b>History cache</b> — reuse previous scans
+          </span>
+          <label class="switch">
+            <input type="checkbox" id="historySwitch" checked />
+            <span class="slider round"></span>
+          </label>
+        </label>
+
+        <label class="switch-row">
+          <span class="switch-label">
+            <b>Domain age</b> — RDAP age lookup scoring
+          </span>
+          <label class="switch">
+            <input type="checkbox" id="layer-domain-age" />
+            <span class="slider round"></span>
+          </label>
+        </label>
+
+        <label class="switch-row">
+          <span class="switch-label">
+            <b>Safe Browsing</b> — Google reputation check
+          </span>
+          <label class="switch">
+            <input type="checkbox" id="layer-safe-browsing" />
+            <span class="slider round"></span>
+          </label>
+        </label>
+
+        <label class="switch-row">
+          <span class="switch-label">
+            <b>Brand enrichment</b> — spoof detection signals
+          </span>
+          <label class="switch">
+            <input type="checkbox" id="layer-phishing-enrichment" />
+            <span class="slider round"></span>
+          </label>
+        </label>
+
+      </div>
+
+      <p class="hint">
+        Toggle layers to control scan depth and performance.
+      </p>
+
+      <!-- SAVE -->
       <div class="actions">
         <button id="save" class="btn btn-primary">Save</button>
         <span id="saved" class="opt-saved" hidden>Saved</span>
       </div>
+
     </div>
+
     <script src="core.js"></script>
     <script src="options.js"></script>
   </body>

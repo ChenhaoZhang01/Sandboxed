@@ -1,5 +1,6 @@
 import puppeteer from "puppeteer";
 import { isBlockedUrl, isBlockedLiteral } from "./ssrf.js";
+import { detectTyposquat, inspectTlsSecurity } from "./threatSignals.js";
 
 const DETONATE_TIMEOUT_MS = Number(process.env.DETONATE_TIMEOUT_MS || 30000);
 const MAX_REDIRECTS = Number(process.env.MAX_REDIRECTS || 15);
@@ -55,6 +56,134 @@ export async function closeBrowser() {
   }
 }
 
+async function installThreatHooks(page) {
+  const inject =
+    typeof page.addInitScript === "function"
+      ? page.addInitScript.bind(page)
+      : typeof page.evaluateOnNewDocument === "function"
+        ? page.evaluateOnNewDocument.bind(page)
+        : null;
+
+  if (!inject) {
+    throw new Error("This Puppeteer runtime does not support page init hooks");
+  }
+
+  await inject(() => {
+    const tracker = window.__sandboxedThreatSignals || (window.__sandboxedThreatSignals = {
+      clipboardWrites: 0,
+      clipboardSamples: [],
+      evalCalls: 0,
+      functionCtorCalls: 0,
+      keystrokeHooks: 0,
+      popunderAttempts: 0,
+      walletCalls: 0,
+      walletProviders: [],
+    });
+
+    const bump = (key, value = 1) => {
+      tracker[key] = (tracker[key] || 0) + value;
+    };
+
+    const markWalletProvider = (name) => {
+      if (!tracker.walletProviders.includes(name)) tracker.walletProviders.push(name);
+    };
+
+    const recordClipboardText = (value) => {
+      const text = String(value || "");
+      tracker.clipboardWrites = (tracker.clipboardWrites || 0) + 1;
+      if (text) tracker.clipboardSamples.push(text.slice(0, 160));
+      if (tracker.clipboardSamples.length > 8) tracker.clipboardSamples.shift();
+    };
+
+    const wrapWalletProvider = (name, provider) => {
+      if (!provider || typeof provider !== "object") return provider;
+      const request = provider.request?.bind(provider);
+      if (typeof request === "function") {
+        provider.request = async (...args) => {
+          bump("walletCalls");
+          markWalletProvider(name);
+          return request(...args);
+        };
+      }
+      return provider;
+    };
+
+    try {
+      const originalOpen = window.open.bind(window);
+      window.open = (...args) => {
+        bump("popunderAttempts");
+        return originalOpen(...args);
+      };
+    } catch {}
+
+    try {
+      const originalEval = window.eval.bind(window);
+      window.eval = (...args) => {
+        bump("evalCalls");
+        return originalEval(...args);
+      };
+    } catch {}
+
+    try {
+      const OriginalFunction = window.Function;
+      window.Function = function (...args) {
+        bump("functionCtorCalls");
+        return new OriginalFunction(...args);
+      };
+      window.Function.prototype = OriginalFunction.prototype;
+    } catch {}
+
+    try {
+      const originalAddEventListener = EventTarget.prototype.addEventListener;
+      EventTarget.prototype.addEventListener = function (type, listener, options) {
+        if (/key|keyup|keydown|keypress|input|paste|clipboard/i.test(String(type))) {
+          bump("keystrokeHooks");
+        }
+        return originalAddEventListener.call(this, type, listener, options);
+      };
+    } catch {}
+
+    try {
+      if (navigator.clipboard && typeof navigator.clipboard.writeText === "function") {
+        const originalWriteText = navigator.clipboard.writeText.bind(navigator.clipboard);
+        navigator.clipboard.writeText = async (text) => {
+          recordClipboardText(text);
+          return originalWriteText(text);
+        };
+      }
+    } catch {}
+
+    try {
+      const hookProvider = (name) => {
+        const desc = Object.getOwnPropertyDescriptor(window, name);
+        if (!desc || desc.configurable === false) return;
+
+        Object.defineProperty(window, name, {
+          configurable: true,
+          enumerable: true,
+          get() {
+            const provider = desc.get ? desc.get.call(window) : desc.value;
+            return wrapWalletProvider(name, provider);
+          },
+          set(v) {
+            if (typeof v === "object" && v) {
+              wrapWalletProvider(name, v);
+            }
+            if (desc.set) {
+              desc.set.call(window, v);
+            } else if (desc.writable) {
+              desc.value = v;
+            }
+          },
+        });
+      };
+
+      hookProvider("ethereum");
+      hookProvider("solana");
+    } catch {}
+  });
+}
+
 /**
  * Detonate a URL: open it in an isolated browser context, follow the full
  * redirect chain, screenshot the landing page, and extract behavioral signals.
@@ -74,6 +203,8 @@ export async function detonate(targetUrl) {
   let mainStatus = null;
 
   try {
+    await installThreatHooks(page);
+
     await page.setUserAgent(USER_AGENT);
     await page.setViewport({ width: 1280, height: 800 });
 
@@ -140,8 +271,17 @@ export async function detonate(targetUrl) {
     const finalUrl = page.url();
 
     const pageMeta = await extractPageData(page);
-
-    const signals = await extractSignals(page, finalUrl);
+    const runtimeSignals = await collectRuntimeSignals(page);
+    const tlsSignals = await inspectTls(page, finalUrl);
+    const signalData = await extractSignals(page, finalUrl);
+    const cookieNames = (await page.cookies().catch(() => [])).map((cookie) => cookie.name);
+    const signals = {
+      ...signalData,
+      cookieNames,
+      runtime: runtimeSignals,
+      tls: tlsSignals,
+      typosquat: detectTyposquat(new URL(finalUrl).hostname || ""),
+    };
 
     // Give heavy / animated pages a brief moment to settle before capturing
     // the final screenshot (helps with loading-overlay pages like x.com).
@@ -219,9 +359,20 @@ async function extractSignals(page, finalUrl) {
 
     const metaRefresh = !!document.querySelector('meta[http-equiv="refresh" i]');
 
-    const externalScripts = Array.from(document.querySelectorAll("script[src]"))
-      .map((s) => s.src)
-      .filter(Boolean);
+    const externalResourceUrls = Array.from(
+      document.querySelectorAll("script[src], iframe[src], img[src], link[href], video[src], audio[src], source[src], a[href]")
+    )
+      .map((el) => (el.getAttribute("src") || el.getAttribute("href") || "").trim())
+      .filter(Boolean)
+      .filter((value) => /^https?:/i.test(value))
+      .filter((value, index, list) => list.indexOf(value) === index);
+
+    const storageKeys = Array.from(
+      new Set([
+        ...Object.keys(window.localStorage || {}),
+        ...Object.keys(window.sessionStorage || {}),
+      ])
+    );
 
     const bodyText = lower(document.body ? document.body.innerText : "").slice(0, 5000);
     const titleText = lower(document.title);
@@ -236,7 +387,9 @@ async function extractSignals(page, finalUrl) {
       ccInputs,
       forms,
       metaRefresh,
-      externalScriptCount: externalScripts.length,
+      externalScriptCount: externalResourceUrls.length,
+      externalResourceUrls,
+      storageKeys,
       bodyText,
       titleText,
       headingText,
@@ -288,6 +441,44 @@ async function extractSignals(page, finalUrl) {
   };
 }
 
+
+async function collectRuntimeSignals(page) {
+  try {
+    return await page.evaluate(() => ({
+      ...(window.__sandboxedThreatSignals || {}),
+      walletProviders: Array.isArray(window.__sandboxedThreatSignals?.walletProviders)
+        ? [...window.__sandboxedThreatSignals.walletProviders]
+        : [],
+      clipboardSamples: Array.isArray(window.__sandboxedThreatSignals?.clipboardSamples)
+        ? [...window.__sandboxedThreatSignals.clipboardSamples]
+        : [],
+    }));
+  } catch {
+    return {};
+  }
+}
+
+async function inspectTls(page, finalUrl) {
+  const cdp = await page.target().createCDPSession().catch(() => null);
+  if (!cdp) return inspectTlsSecurity(finalUrl, {});
+
+  try {
+    const [securityState, cert] = await Promise.all([
+      cdp.send("Security.getSecurityState", { origin: finalUrl }).catch(() => ({})),
+      cdp.send("Security.getCertificate", { origin: finalUrl }).catch(() => ({})),
+    ]);
+
+    return inspectTlsSecurity(finalUrl, {
+      protocol: securityState.protocol || securityState.securityState || "unknown",
+      subjectName: cert.subjectName || cert.certificate?.subjectName || "",
+      issuer: cert.issuer || cert.certificate?.issuer || "",
+      validFrom: cert.validFrom || cert.certificate?.validFrom || null,
+      validTo: cert.validTo || cert.certificate?.validTo || null,
+    });
+  } catch {
+    return inspectTlsSecurity(finalUrl, {});
+  }
+}
 
 async function extractPageData(page){
   const pageMeta = await page.evaluate(() => {
