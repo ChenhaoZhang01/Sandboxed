@@ -45,48 +45,88 @@ function resetView() {
   idle.classList.add("hidden");
 }
 
-async function detonate(rawUrl) {
-  const verifiedLinks = await fetchVerifiedLinks()
-  const url = (rawUrl ?? urlInput.value).trim();
-  if (!url) {
-    urlInput.focus();
-    return;
+function normalize(u) {
+  try {
+    const url = new URL(u.includes("://") ? u : "http://" + u);
+    return url.hostname.replace(/^www\./, "");
+  } catch {
+    return u.replace(/^https?:\/\//, "").replace(/\/$/, "");
   }
-  urlInput.value = url;
-  resetView();
-  spinner.classList.remove("hidden");
-  goBtn.disabled = true;
-  setStatus("running", "Detonating");
-  consoleState.textContent = "Working";
+}
+async function detonate(url, opts = {}) {
+  const base = await getApiBase();
+  const timeoutMs = opts.timeoutMs ?? 25000;
+
+  const controller = new AbortController();
+  const t = setTimeout(() => controller.abort(), timeoutMs);
 
   try {
-    if(verifiedLinks.includes(url)){
-      console.log("verified link!")
-      return;
+    let verifiedLinks = [];
+    try {
+      const vres = await fetch(base + "/verified-links");
+      const vdata = await vres.json();
+      verifiedLinks = Array.isArray(vdata?.data) ? vdata.data : [];
+    } catch {
+      verifiedLinks = [];
     }
-    const res = await fetch(apiBase() + "/detonate", {
+
+    const normalize = (u) => {
+      try {
+        const url = new URL(u.includes("://") ? u : "http://" + u);
+        return url.hostname.replace(/^www\./, "");
+      } catch {
+        return u
+          .replace(/^https?:\/\//, "")
+          .replace(/^www\./, "")
+          .split(/[/?#]/)[0]
+          .replace(/\/$/, "");
+      }
+    };
+
+    const match = verifiedLinks.find(
+      (x) => normalize(x.url) === normalize(url)
+    );
+
+    if (match) {
+      console.log("in verified links!");
+      return match.data;
+    }
+
+    const res = await fetch(base + "/detonate", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ url }),
+      signal: controller.signal,
     });
-    const data = await res.json();
-    spinner.classList.add("hidden");
+
+    let data = {};
+    try {
+      data = await res.json();
+    } catch {}
 
     if (!res.ok) {
-      showError(data.error || "Detonation failed.");
-      return;
+      throw new Error(data.error || `Detonation failed (HTTP ${res.status}).`);
     }
-    render(data);
+
+    try {
+      await fetch(base + "/verified-links/add", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ url, data }),
+      });
+    } catch (e) {
+      console.warn("failed to store verified link:", e.message);
+    }
+
+    return data;
+
   } catch (err) {
-    spinner.classList.add("hidden");
-    showError(
-      "Could not reach the detonation engine at " +
-        apiBase() +
-        ". Is the backend running? " +
-        "(" + err.message + ")"
-    );
+    if (err.name === "AbortError") {
+      throw new Error("Backend timed out — the page took too long to detonate.");
+    }
+    throw new Error("Backend unavailable at " + base + ". (" + err.message + ")");
   } finally {
-    goBtn.disabled = false;
+    clearTimeout(t);
   }
 }
 
