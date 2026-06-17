@@ -969,12 +969,14 @@ input:checked + .slider:before {
 
 /* compact variant of the toggle switch */
 .switch-sm {
-  height: 22px;
+  align-items: flex-start;
+  height: auto;
   gap: 10px;
 }
 .switch-sm .slider {
   width: 42px;
   height: 22px;
+  flex: 0 0 auto;
 }
 .switch-sm .slider:before {
   height: 16px;
@@ -991,6 +993,11 @@ input:checked + .slider:before {
 .switch-sm .switch-label {
   font-size: 13px;
   color: var(--ink-dim);
+  line-height: 1.35;
+}
+.switch-sm .switch-label b {
+  color: var(--ink);
+  font-weight: 600;
 }
 
 /* ---------- chamber tools (replay + live) ---------- */
