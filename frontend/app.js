@@ -46,6 +46,7 @@ function resetView() {
 }
 
 async function detonate(rawUrl) {
+  const verifiedLinks = await fetchVerifiedLinks()
   const url = (rawUrl ?? urlInput.value).trim();
   if (!url) {
     urlInput.focus();
@@ -59,6 +60,10 @@ async function detonate(rawUrl) {
   consoleState.textContent = "Working";
 
   try {
+    if(verifiedLinks.includes(url)){
+      console.log("verified link!")
+      return;
+    }
     const res = await fetch(apiBase() + "/detonate", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -83,6 +88,15 @@ async function detonate(rawUrl) {
   } finally {
     goBtn.disabled = false;
   }
+}
+
+async function fetchVerifiedLinks() {
+  const res = await fetch(apiBase() + '/verified-links');
+  const data = await res.json();
+
+  if (!data.ok) throw new Error("Failed to load links");
+
+  return data.data;
 }
 
 // Static indicator scan: reads a PDF's raw bytes in-browser and checks for

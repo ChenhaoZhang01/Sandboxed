@@ -6,6 +6,12 @@ import { scoreRisk } from "./risk.js";
 import { isBlockedUrl } from "./ssrf.js";
 import { scanBuffer } from "./pdfScan.js";
 import { checkForPhishing } from "../tools/phishing-detect.js";
+import { readFile } from 'fs/promises';
+import path from "path";
+import { fileURLToPath } from "url";
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 
 const app = express();
@@ -64,6 +70,15 @@ app.post("/detonate", async (req, res) => {
   }
 });
 
+app.get("/verified-links", async (_req, res) => {
+  try {
+    const data = await getVerifiedLinks();
+    res.json({ ok: true, data });
+  } catch (err) {
+    res.status(500).json({ error: "Failed to load verified links" });
+  }
+});
+
 const PDF_SCAN_LIMIT = `${Number(process.env.PDF_SCAN_MAX_MB || 20)}mb`;
 
 /**
@@ -91,6 +106,18 @@ app.post(
     }
   }
 );
+
+
+async function getVerifiedLinks() {
+  try {
+    const filePath = path.join(__dirname, "../verifiedLinks.json");
+    const rawData = await readFile(filePath, "utf8");
+    return JSON.parse(rawData);
+  } catch (error) {
+    console.error("Error reading file:", error);
+    return [];
+  }
+}
 
 async function resolveTarget(input) {
   if (!input) return null;
