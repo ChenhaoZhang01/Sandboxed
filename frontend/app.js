@@ -23,6 +23,12 @@ const stamp = $("stamp");
 const errorBox = $("error");
 const readout = $("readout");
 
+// pdf scanning (rename later)
+const fs = require('fs')
+const { ClamScan } = require('pompelmi');
+const path = require('path');
+ 
+
 function setStatus(state, text) {
   status.dataset.state = state;
   statusText.textContent = text;
@@ -76,6 +82,48 @@ async function detonate(rawUrl) {
   } finally {
     goBtn.disabled = false;
   }
+}
+
+// contains both static keyword analysis of malicious indicators(parsing for suspicious metadata tags)
+async function scanPDF(filepath) {
+  const clam = new ClamScan();
+  const file = path.resolve(filepath);
+
+  let isSafe = true 
+
+  const buffer = fs.readFileSync(filepath);
+  const pdfContent = buffer.toString('utf8');
+
+  // -- CLAMSCAN --
+  try {
+    const isClean = await clam.scanFile(file);
+  if (isClean) {
+    console.log('The PDF is safe.'); // debug 
+  } else {
+    console.log('Malware detected in PDF!');
+
+    isSafe = false
+
+    // deeper functions post detection
+    const { isInfected, file: scannedFile, viruses } = await clam.isInfected(file);
+
+    console.log(`Detected Malware/Viruses: ${viruses.join(', ')}`);
+  }
+  } catch (err) {
+    console.error('ClamAV scan failed:', err);
+  }
+
+  // -- INDICATORS --
+  // Suspicious PDF structures and keys
+  const indicators = ['/JS', '/JavaScript', '/OpenAction', '/AA', '/EmbeddedFile'];
+  const foundIndicators = indicators.filter(indicator => pdfContent.includes(indicator));
+
+  if (foundIndicators.length > 0) {
+    isSafe = false
+    console.log('Suspicious elements found:', foundIndicators);
+  }
+
+  return isSafe
 }
 
 function showError(msg) {
