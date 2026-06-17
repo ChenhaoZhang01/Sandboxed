@@ -7,7 +7,7 @@ import { isBlockedUrl } from "./ssrf.js";
 import { runWithTimeout } from "./timeouts.js";
 import { scanBuffer } from "./pdfScan.js";
 import { checkForPhishing } from "../tools/phishing-detect.js";
-import { readFile } from 'fs/promises';
+import { readFile, writeFile } from 'fs/promises';
 import path from "path";
 import { fileURLToPath } from "url";
 
@@ -91,6 +91,23 @@ app.get("/verified-links", async (_req, res) => {
   }
 });
 
+app.post("/verified-links/add", async (req, res) => {
+  try {
+    const { url, data } = req.body;
+
+    if (!url) {
+      return res.status(400).json({ error: "Missing url" });
+    }
+
+    const result = await addVerifiedLink(url, data || null);
+
+    res.json({ ok: true, added: result });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "Failed to add verified link" });
+  }
+});
+
 const PDF_SCAN_LIMIT = `${Number(process.env.PDF_SCAN_MAX_MB || 20)}mb`;
 
 /**
@@ -127,8 +144,33 @@ async function getVerifiedLinks() {
     return JSON.parse(rawData);
   } catch (error) {
     console.error("Error reading file:", error);
-    return [];
+    return {};
   }
+}
+
+async function addVerifiedLink(url, data) {
+  const filePath = path.join(__dirname, "../verifiedLinks.json");
+
+  let existing = [];
+
+  try {
+    const raw = await readFile(filePath, "utf8");
+    existing = JSON.parse(raw);
+  } catch {
+    existing = [];
+  }
+
+  const entry = {
+    url,
+    data,
+    timestamp: Date.now(),
+  };
+
+  existing.push(entry);
+
+  await writeFile(filePath, JSON.stringify(existing, null, 2), "utf8");
+
+  return entry;
 }
 
 async function resolveTarget(input) {

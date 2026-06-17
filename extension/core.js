@@ -29,42 +29,83 @@ const SBX = (() => {
     return (await getSettings()).apiBase;
   }
 
-  // --- backend call with timeout + friendly errors ---
-  async function detonate(url, opts = {}) {
-    const base = await getApiBase();
-    const timeoutMs = opts.timeoutMs ?? 45000;
-    const controller = new AbortController();
-    const t = setTimeout(() => controller.abort(), timeoutMs);
+async function detonate(url, opts = {}) {
+  const base = await getApiBase();
+  const timeoutMs = opts.timeoutMs ?? 25000;
 
-    let res;
+  const controller = new AbortController();
+  const t = setTimeout(() => controller.abort(), timeoutMs);
+
+  try {
+    let verifiedLinks = [];
     try {
-      res = await fetch(base + "/detonate", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ url }),
-        signal: controller.signal,
-      });
-    } catch (err) {
-      clearTimeout(t);
-      if (err.name === "AbortError") {
-        throw new Error("Backend timed out — the page took too long to detonate.");
-      }
-      throw new Error("Backend unavailable at " + base + ".");
+      const vres = await fetch(base + "/verified-links");
+      const vdata = await vres.json();
+      verifiedLinks = Array.isArray(vdata?.data) ? vdata.data : [];
+    } catch {
+      verifiedLinks = [];
     }
-    clearTimeout(t);
+
+    const normalize = (u) => {
+      try {
+        const url = new URL(u.includes("://") ? u : "http://" + u);
+        return url.hostname.replace(/^www\./, "");
+      } catch {
+        return u
+          .replace(/^https?:\/\//, "")
+          .replace(/^www\./, "")
+          .split(/[/?#]/)[0]
+          .replace(/\/$/, "");
+      }
+    };
+
+    const match = verifiedLinks.find(
+      (x) => normalize(x.url) === normalize(url)
+    );
+
+    // 3. shortcut: already verified
+    if (match) {
+      console.log("in verified links!");
+      return match.data;
+    }
+
+    const res = await fetch(base + "/detonate", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ url }),
+      signal: controller.signal,
+    });
 
     let data = {};
     try {
       data = await res.json();
-    } catch {
-      /* non-JSON body */
-    }
+    } catch {}
+
     if (!res.ok) {
       throw new Error(data.error || `Detonation failed (HTTP ${res.status}).`);
     }
-    return data;
-  }
 
+    try {
+      await fetch(base + "/verified-links/add", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ url, data }),
+      });
+    } catch (e) {
+      console.warn("failed to store verified link:", e.message);
+    }
+
+    return data;
+
+  } catch (err) {
+    if (err.name === "AbortError") {
+      throw new Error("Backend timed out — the page took too long to detonate.");
+    }
+    throw new Error("Backend unavailable at " + base + ". (" + err.message + ")");
+  } finally {
+    clearTimeout(t);
+  }
+}
   // --- small DOM helper (pages only) ---
   function el(tag, opts = {}, kids = []) {
     const n = document.createElement(tag);
