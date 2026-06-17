@@ -82,6 +82,25 @@ body.popup { width: 400px; }
   margin-bottom: 12px;
 }
 
+/* styles.css / ui.css */
+.sbx-phishing {
+  margin-top: 8px;
+  padding: 8px 12px;
+  border-radius: 6px;
+  font-size: 0.85rem;
+  line-height: 1.5;
+}
+.sbx-warn {
+  background: rgba(248, 113, 113, 0.1);
+  border: 1px solid #f87171;
+  color: #f87171;
+}
+.sbx-ok {
+  background: rgba(74, 222, 128, 0.1);
+  border: 1px solid #4ade80;
+  color: #4ade80;
+}
+
 /* input + buttons */
 .url-input {
   width: 100%;

@@ -24,7 +24,7 @@ let browserPromise = null;
  * Reuse a single browser instance across detonations for speed.
  * Each detonation still gets its own isolated incognito context + page.
  */
-async function getBrowser() {
+export async function getBrowser() {
   if (!browserPromise) {
     browserPromise = puppeteer.launch({
       headless: true,
@@ -130,14 +130,11 @@ export async function detonate(targetUrl) {
     mainStatus = response ? response.status() : null;
 
     const finalUrl = page.url();
-    let title = "";
-    try {
-      title = await page.title();
-    } catch {
-      title = "";
-    }
+
+    const pageMeta = await extractPageData(page)
 
     const signals = await extractSignals(page, finalUrl);
+
 
     let screenshot = null;
     try {
@@ -150,7 +147,9 @@ export async function detonate(targetUrl) {
       requestedUrl: targetUrl,
       finalUrl,
       finalStatus: mainStatus,
-      title,
+      title: pageMeta.title,
+      favicon: pageMeta.favicon,
+      h1s: pageMeta.h1s,
       redirectChain: dedupeChain(redirectChain, finalUrl),
       redirectCount: Math.max(0, dedupeChain(redirectChain, finalUrl).length - 1),
       downloads,
@@ -274,4 +273,30 @@ async function extractSignals(page, finalUrl) {
     externalScriptCount: dom.externalScriptCount,
     brandImpersonation: brandMentions,
   };
+}
+
+
+async function extractPageData(page){
+  const pageMeta = await page.evaluate(() => {
+    // Favicon: prefer <link rel="icon"> variants, fall back to /favicon.ico
+    const faviconEl =
+      document.querySelector('link[rel="icon"]') ||
+      document.querySelector('link[rel="shortcut icon"]') ||
+      document.querySelector('link[rel="apple-touch-icon"]');
+    const favicon = faviconEl
+      ? new URL(faviconEl.href, location.href).href
+      : new URL("/favicon.ico", location.href).href;
+
+    // Title
+    const title = document.title || null;
+
+    // H1s (trim whitespace, filter empties, cap at 10)
+    const h1s = [...document.querySelectorAll("h1")]
+      .map((el) => el.innerText.trim())
+      .filter(Boolean)
+      .slice(0, 10);
+
+    return { favicon, title, h1s };
+  });
+  return pageMeta;
 }

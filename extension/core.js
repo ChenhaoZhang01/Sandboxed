@@ -115,6 +115,22 @@ const SBX = (() => {
     root.replaceChildren(el("div", { class: "error-box", text: msg }));
   }
 
+  function renderPhishing(p) {
+    if (!p) return null;
+
+    if (p.phishing) {
+      const wrap = el("div", { class: "sbx-phishing sbx-warn" });
+      wrap.innerHTML =
+        "⚠️ Spoofed site detected<br/>" +
+        "<span>Impersonating: <strong>" + p.spoofedBrand + "</strong></span><br/>" +
+        "<span>Real URL: <a href=\"" + p.expectedUrl + "\" target=\"_blank\" rel=\"noopener\">" +
+        p.expectedUrl + "</a></span>";
+      return wrap;
+    }
+
+    return el("div", { class: "sbx-phishing sbx-ok", text: "✓ No spoof detected" });
+  }
+
   function renderResult(root, d) {
     const verdict = d.verdict || "safe";
 
@@ -184,10 +200,13 @@ const SBX = (() => {
       });
     }
 
+    const phishingNode = renderPhishing(d.phishing);
+
     root.replaceChildren(
       chamber,
       el("div", { class: "readout" }, [
         grid,
+        phishingNode,
         el("div", { class: "section-label", text: "Trajectory" }),
         traj,
         el("div", { class: "section-label", text: "Why" }),
