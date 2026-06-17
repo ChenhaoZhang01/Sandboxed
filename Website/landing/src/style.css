@@ -1,0 +1,293 @@
+/* Tailwind CSS v4 — utility classes available everywhere if needed. */
+@import "tailwindcss";
+
+/* =============================================================================
+   Sandboxed snap-scroll landing — structure ported from reference.html,
+   themed for the AI/tech imagery. Snap timing/feel matches the reference.
+   ============================================================================= */
+
+:root {
+  --ink: #eaf2ff;
+  --ink-dim: rgba(234, 242, 255, 0.6);
+  --ink-faint: rgba(234, 242, 255, 0.18);
+  --accent: #4cc2ff;
+  --bg: #060a14;
+
+  --display: "Bricolage Grotesque", sans-serif;
+  --body: "Inter", sans-serif;
+  --mono: "Space Mono", monospace;
+}
+
+* { margin: 0; padding: 0; box-sizing: border-box; }
+
+html, body {
+  height: 100%;
+  overflow: hidden;
+  background: var(--bg);
+  color: var(--ink);
+  font-family: var(--body);
+  font-weight: 300;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* ---------- panel stage ---------- */
+#stage { position: fixed; inset: 0; overflow: hidden; }
+
+.panel {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  pointer-events: none;
+  will-change: transform;
+}
+.panel.is-active .content { pointer-events: none; }
+.panel.is-active .content a { pointer-events: auto; }
+
+/* background image layer — GSAP fades it in and slow-zooms it */
+.layer-bg {
+  position: absolute;
+  inset: 0;
+  background-size: cover;
+  background-position: center;
+  transform-origin: center;
+  will-change: transform, opacity;
+}
+
+/* legibility scrim, placed where each section's text sits */
+.scrim { position: absolute; inset: 0; z-index: 2; }
+.s1 .scrim { background: radial-gradient(125% 125% at 50% 50%, rgba(6,10,20,0.30) 0%, rgba(6,10,20,0.74) 100%); }
+.s2 .scrim { background: linear-gradient(115deg, rgba(6,10,20,0.82) 0%, rgba(6,10,20,0.28) 48%, rgba(6,10,20,0.80) 100%); }
+.s3 .scrim { background: linear-gradient(90deg, rgba(6,10,20,0.84) 0%, rgba(6,10,20,0.22) 50%, rgba(6,10,20,0.82) 100%); }
+
+/* ---------- content ---------- */
+.content { position: absolute; inset: 0; z-index: 3; }
+
+/* positioning wrappers keep CSS placement separate from GSAP's entrance
+   transform (which animates the inner .reveal). */
+.pos { position: absolute; padding: 0; }
+/* Side-block widths are kept narrow enough that the two columns in sections 2
+   and 3 always clear each other (and the dot rail on the right) down to the
+   1024px breakpoint, below which they stack. */
+.pos--top-left { top: max(16vh, 130px); left: max(6vw, 48px); max-width: min(40ch, 42vw); }
+/* Lifted above the scroll counter + arrow that share the bottom-right corner. */
+.pos--bottom-right { right: max(6vw, 48px); bottom: max(18vh, 168px); max-width: min(54vw, 680px); text-align: right; }
+.pos--left { left: max(6vw, 48px); top: 50%; transform: translateY(-50%); max-width: min(46vw, 700px); }
+.pos--right { right: max(6vw, 48px); top: 50%; transform: translateY(-50%); max-width: min(30vw, 340px); text-align: right; }
+
+.content--center {
+  display: grid;
+  place-items: center;
+  text-align: center;
+  /* Extra side padding reserves room for the dot rail so the centered headline
+     never runs underneath it. */
+  padding: 0 max(7vw, 72px);
+}
+.content--center .reveal { max-width: min(92vw, 1000px); }
+
+.reveal { will-change: transform, opacity; }
+
+/* ---------- type ---------- */
+.eyebrow {
+  font-family: var(--mono);
+  font-size: 13px;
+  letter-spacing: 0.28em;
+  text-transform: uppercase;
+  color: var(--ink-dim);
+  display: inline-flex;
+  align-items: center;
+  gap: 14px;
+  margin-bottom: 24px;
+  white-space: nowrap;
+}
+.eyebrow::before { content: ""; width: 34px; height: 1px; background: var(--ink-dim); }
+.pos--right .eyebrow,
+.pos--bottom-right .eyebrow { flex-direction: row-reverse; }
+
+.headline {
+  font-family: var(--display);
+  font-weight: 700;
+  text-transform: lowercase;
+  font-size: clamp(48px, 8vw, 128px);
+  line-height: 0.98;
+  letter-spacing: -0.025em;
+}
+.s1 .headline { text-transform: uppercase; }
+
+.copy {
+  font-family: var(--body);
+  font-weight: 300;
+  font-size: clamp(1rem, 1.4vw, 1.2rem);
+  line-height: 1.65;
+  color: rgba(234, 242, 255, 0.82);
+}
+
+.content--center .headline { margin-bottom: 26px; }
+.content--center .copy { margin-inline: auto; max-width: 50ch; }
+.pos--top-left .copy { margin-top: 4px; }
+
+/* call to action */
+.cta {
+  display: inline-flex;
+  align-items: center;
+  gap: 12px;
+  margin-top: 34px;
+  font-family: var(--display);
+  font-weight: 700;
+  font-size: clamp(1.05rem, 2vw, 1.45rem);
+  color: var(--ink);
+  text-decoration: none;
+  border-bottom: 2px solid var(--accent);
+  padding-bottom: 5px;
+  transition: gap 0.25s ease, color 0.25s ease;
+}
+.cta:hover { gap: 18px; color: var(--accent); }
+
+/* ---------- film grain ---------- */
+#grain {
+  position: fixed; inset: 0; z-index: 5; pointer-events: none;
+  opacity: 0.05; mix-blend-mode: overlay;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='120' height='120'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='3'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+}
+
+/* ---------- fixed UI overlays ---------- */
+.ui { position: fixed; z-index: 10; pointer-events: none; }
+.ui a, .ui button { pointer-events: auto; }
+
+.nav {
+  top: 0; left: 0; right: 0;
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 26px max(6vw, 48px);
+  mix-blend-mode: difference;
+}
+.brand {
+  font-family: var(--display); font-weight: 800;
+  font-size: 1.3rem; letter-spacing: 0.02em; color: #fff;
+}
+.nav-links { display: flex; gap: 28px; }
+.nav-links a {
+  font-family: var(--mono); font-size: 12px; letter-spacing: 0.14em;
+  text-transform: uppercase; color: #fff; text-decoration: none; opacity: 0.85;
+  transition: opacity 0.2s;
+}
+.nav-links a:hover { opacity: 1; }
+
+.scroll-left {
+  /* Sits in the far-left margin so it never collides with the content column
+     (which starts at 6vw), even on short viewports where the centered text
+     block and its CTA reach down to this height. */
+  left: 22px; bottom: 92px;
+  display: flex; flex-direction: column; align-items: center; gap: 14px;
+  mix-blend-mode: difference;
+}
+.scroll-left .label {
+  font-family: var(--mono); font-size: 11px; letter-spacing: 0.3em;
+  text-transform: uppercase; color: #fff;
+  writing-mode: vertical-rl; transform: rotate(180deg);
+}
+.scroll-track { width: 1px; height: 60px; background: rgba(255,255,255,0.3); position: relative; overflow: hidden; }
+.scroll-track::after {
+  content: ""; position: absolute; left: 0; top: 0; width: 100%; height: 22px;
+  background: #fff; animation: drip 1.9s cubic-bezier(.7,0,.3,1) infinite;
+}
+@keyframes drip { 0% { transform: translateY(-100%);} 60%,100% { transform: translateY(280%);} }
+
+.scroll-right {
+  /* Mirror of .scroll-left in the far-right margin. Vertically separated from
+     the centered dot rail above it, so the two never touch. */
+  right: 22px; bottom: 92px;
+  display: flex; flex-direction: column; align-items: center; gap: 12px;
+  mix-blend-mode: difference;
+}
+.counter { font-family: var(--mono); font-size: 12px; letter-spacing: 0.18em; color: #fff; }
+.counter b { font-weight: 700; }
+.scroll-right .arrow { width: 1px; height: 38px; background: rgba(255,255,255,0.35); position: relative; }
+.scroll-right .arrow::after {
+  content: ""; position: absolute; bottom: 0; left: -3px;
+  width: 7px; height: 7px; border-right: 1px solid #fff; border-bottom: 1px solid #fff;
+  transform: rotate(45deg);
+}
+
+.dots {
+  right: 22px; top: 50%; transform: translateY(-50%);
+  display: flex; flex-direction: column; gap: 18px;
+}
+.dot {
+  width: 40px; height: 40px; padding: 0; border: none; background: none; cursor: pointer;
+  display: grid; place-items: center; position: relative;
+}
+.dot i {
+  display: block; width: 9px; height: 9px; border-radius: 50%;
+  border: 1px solid var(--ink-dim); background: transparent;
+  transition: transform 0.35s, background 0.35s, border-color 0.35s;
+}
+.dot:hover i { border-color: var(--ink); transform: scale(1.25); }
+.dot.is-active i { background: var(--accent); border-color: var(--accent); transform: scale(1.15); }
+.dot::before {
+  content: attr(data-num);
+  position: absolute; right: 100%; margin-right: 6px;
+  font-family: var(--mono); font-size: 11px; letter-spacing: 0.1em; color: var(--ink);
+  opacity: 0; transform: translateX(6px); transition: opacity 0.3s, transform 0.3s; white-space: nowrap;
+}
+.dot.is-active::before, .dot:hover::before { opacity: 1; transform: translateX(0); }
+.dot:focus-visible i { outline: 2px solid var(--ink); outline-offset: 3px; }
+
+.footer {
+  left: 0; right: 0; bottom: 0;
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 0 max(6vw, 48px) 28px;
+  mix-blend-mode: difference;
+}
+.socials { display: flex; gap: 22px; }
+.socials a, .footer .mail {
+  font-family: var(--mono); font-size: 12px; letter-spacing: 0.12em;
+  text-transform: uppercase; color: #fff; text-decoration: none; opacity: 0.85;
+  transition: opacity 0.2s;
+}
+.socials a:hover, .footer .mail:hover { opacity: 1; }
+.footer .mail { border-bottom: 1px solid rgba(255,255,255,0.4); padding-bottom: 2px; }
+
+a:focus-visible, button:focus-visible { outline: 2px solid #fff; outline-offset: 4px; border-radius: 2px; }
+
+/* ---------- responsive ---------- */
+@media (max-width: 1024px) {
+  /* Two-block sections collapse to a single centered column, laid out in normal
+     flow so the blocks can never overlap no matter how tall the text gets. */
+  .content:not(.content--center) {
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    gap: 22px;
+    padding: 104px max(6vw, 24px) 128px;
+  }
+  .pos--top-left, .pos--bottom-right, .pos--left, .pos--right {
+    position: static;
+    inset: auto;
+    transform: none;
+    max-width: none;
+    text-align: left;
+  }
+  .pos--bottom-right .eyebrow, .pos--right .eyebrow { flex-direction: row; }
+  .content--center { padding: 104px max(6vw, 24px) 128px; }
+
+  .scroll-left, .scroll-right, .nav-links { display: none; }
+
+  /* Move the section dots to a horizontal row along the bottom, clear of text. */
+  .dots {
+    flex-direction: row;
+    inset: auto 0 64px 0;
+    transform: none;
+    justify-content: center;
+    gap: 16px;
+  }
+  .dot::before { display: none; }
+}
+@media (max-width: 520px) {
+  .footer { flex-direction: column; gap: 8px; align-items: flex-start; padding-bottom: 16px; }
+  .socials { gap: 14px; }
+  /* Lift the dots above the now-taller stacked footer. */
+  .dots { bottom: 92px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .scroll-track::after { animation: none; }
+}

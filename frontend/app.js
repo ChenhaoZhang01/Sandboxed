@@ -1,11 +1,11 @@
 const $ = (id) => document.getElementById(id);
-const DEFAULT_API = "http://localhost:8787";
+const DEFAULT_API = "https://sandboxed-backend.onrender.com";
 
 // --- API base, persisted ---
 const apiInput = $("api");
-apiInput.value = localStorage.getItem("sandboxer_api") || DEFAULT_API;
+apiInput.value = localStorage.getItem("sandboxed_api") || DEFAULT_API;
 apiInput.addEventListener("change", () =>
-  localStorage.setItem("sandboxer_api", apiInput.value.trim())
+  localStorage.setItem("sandboxed_api", apiInput.value.trim())
 );
 const apiBase = () => (apiInput.value.trim() || DEFAULT_API).replace(/\/$/, "");
 

@@ -1,9 +1,9 @@
 {
-  "name": "shadowbox-backend",
+  "name": "sandboxed-backend",
   "version": "0.1.0",
   "private": true,
   "type": "module",
-  "description": "ShadowBox: detonates suspicious URLs in a sandboxed headless browser and returns a risk verdict.",
+  "description": "Sandboxed: detonates suspicious URLs in a sandboxed headless browser and returns a risk verdict.",
   "main": "src/server.js",
   "scripts": {
     "start": "node src/server.js",

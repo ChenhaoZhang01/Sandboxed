@@ -1,0 +1,20 @@
+# Render Blueprint — deploys the Sandboxed detonation backend straight from Git.
+# In Render: New + → Blueprint → pick this repo. Render reads this file and
+# provisions the service below. The backend lives in /backend and ships its own
+# Dockerfile (official Puppeteer image), so Render builds the container directly.
+services:
+  - type: web
+    name: sandboxed-backend
+    runtime: docker
+    plan: free            # 512 MB RAM / 0.1 CPU. See note in backend/DEPLOY.md if Chromium OOMs.
+    region: oregon
+    rootDir: backend       # with rootDir set, the docker paths below are resolved
+    dockerfilePath: ./Dockerfile  # RELATIVE TO rootDir — so no second "backend/" prefix
+    dockerContext: .
+    healthCheckPath: /health
+    autoDeploy: true       # redeploy on every push to the connected branch
+    envVars:
+      - key: NODE_ENV
+        value: production
+      # PORT is injected by Render automatically; server.js already reads it.
+      # Do NOT set ALLOW_PRIVATE_TARGETS in production — it disables SSRF defenses.

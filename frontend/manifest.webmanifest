@@ -1,6 +1,6 @@
 {
-  "name": "Sandboxer — URL Detonation",
-  "short_name": "Sandboxer",
+  "name": "Sandboxed — URL Detonation",
+  "short_name": "Sandboxed",
   "description": "Scan or paste a suspicious link and detonate it in a sandbox before it touches your phone.",
   "start_url": "./",
   "scope": "./",
