@@ -28,6 +28,7 @@ const dropzone = $("dropzone");
 const fileInput = $("pdf-file-input");
 const browseBtn = $("pdf-browse-btn");
 const dropzoneStatus = $("dropzone-status");
+const scanResult = $("scan-result");
 
 function setStatus(state, text) {
   status.dataset.state = state;
@@ -122,16 +123,19 @@ async function scanPdfOnServer(file) {
 async function handlePdfFile(file) {
   if (!file) return;
   if (file.type !== "application/pdf" && !file.name.toLowerCase().endsWith(".pdf")) {
-    alert("Please drop or select a PDF file.");
+    scanResult.textContent = "Please drop or select a PDF file.";
+    scanResult.classList.remove("hidden", "safe", "warn");
+    scanResult.classList.add("danger");
     return;
   }
 
   dropzoneStatus.textContent = "Scanning…";
   dropzone.classList.add("scanning");
+  scanResult.classList.add("hidden");
 
   try {
     const [local, server] = await Promise.all([scanPDF(file), scanPdfOnServer(file)]);
-    alert(buildScanMessage(file.name, local, server));
+    renderScanResult(file.name, local, server);
   } finally {
     dropzone.classList.remove("scanning");
     dropzoneStatus.textContent = "Drop a PDF here or click to browse";
@@ -139,7 +143,7 @@ async function handlePdfFile(file) {
   }
 }
 
-function buildScanMessage(filename, local, server) {
+function renderScanResult(filename, local, server) {
   const lines = [`PDF scan: ${filename}`, ""];
 
   lines.push(
@@ -158,7 +162,12 @@ function buildScanMessage(filename, local, server) {
     lines.push(`ClamAV: could not complete scan (${server.message || "unknown error"}).`);
   }
 
-  return lines.join("\n");
+  const infected = (server.status == "infected") || local.foundIndicators.length > 0;
+  const confirmedClean = (server.status == "clean") && local.foundIndicators.length === 0;
+
+  scanResult.textContent = lines.join("\n");
+  scanResult.classList.remove("hidden", "safe", "warn", "danger");
+  scanResult.classList.add(infected ? "danger" : confirmedClean ? "safe" : "warn");
 }
 
 function showError(msg) {

@@ -364,6 +364,31 @@ a {
   color: var(--ink-faint);
 }
 
+.scan-result {
+  margin-top: 12px;
+  border-radius: var(--radius);
+  border: 1px solid var(--line);
+  padding: 12px 14px;
+  font-family: "IBM Plex Mono", monospace;
+  font-size: 13px;
+  white-space: pre-line;
+}
+.scan-result.safe {
+  color: var(--safe);
+  background: rgba(55, 211, 153, 0.07);
+  border-color: rgba(55, 211, 153, 0.25);
+}
+.scan-result.warn {
+  color: var(--warn);
+  background: rgba(255, 166, 43, 0.08);
+  border-color: rgba(255, 166, 43, 0.3);
+}
+.scan-result.danger {
+  color: var(--danger);
+  background: rgba(255, 87, 101, 0.08);
+  border-color: rgba(255, 87, 101, 0.3);
+}
+
 #qr-reader {
   margin-top: 14px;
   border-radius: var(--radius);
