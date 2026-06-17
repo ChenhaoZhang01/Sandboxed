@@ -1,5 +1,5 @@
 # Containerized detonation engine. Each running container is a disposable
-# sandbox — the "ShadowBox" isolation story. The official Puppeteer image
+# sandbox — the "Sandboxed" isolation story. The official Puppeteer image
 # ships a matching Chromium + all system deps, so nothing to wrangle.
 FROM ghcr.io/puppeteer/puppeteer:24.10.0
 

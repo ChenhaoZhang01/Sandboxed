@@ -1,6 +1,6 @@
-# ShadowBox — URL Detonation Engine
+# Sandboxed — URL Detonation Engine
 
-The backend for **QRisk / ShadowBox**: it "detonates" a suspicious URL (the kind
+The backend for **Sandboxed**: it "detonates" a suspicious URL (the kind
 hidden behind a scammy QR code) inside a sandboxed headless browser, follows the
 full redirect chain, screenshots the real landing page, and returns a risk
 verdict — **without the link ever touching the user's device.**
@@ -53,8 +53,8 @@ ngrok http 8787
 ## Run in Docker (the "sandbox" isolation story)
 
 ```bash
-docker build -t shadowbox .
-docker run -p 8787:8787 shadowbox
+docker build -t sandboxed .
+docker run -p 8787:8787 sandboxed
 ```
 
 Each container is a disposable sandbox. In production you'd spin one ephemeral

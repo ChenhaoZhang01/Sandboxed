@@ -1,55 +1,64 @@
-# Sandboxer — Browser Extension
+# Sandboxed — Browser Extension
 
-A Chrome/Edge (Manifest V3) extension that detonates links in the
-[Sandboxer backend](../backend) right from the browser — so you can check a
-link **before** you click it.
+A Chrome/Edge (Manifest V3) extension that checks links in the
+[Sandboxed backend](../backend) **before** you visit them — automatically on click,
+manually via right-click, or both.
 
 ## What it does
 
-- **Right-click a link → "Detonate link in Sandboxer"** — opens a result window
-  that detonates the link in the sandbox and shows the verdict + screenshot.
-- **Right-click a page → "Detonate this page in Sandboxer"** — same, for the
-  current page URL.
-- **Toolbar popup** — paste a link, or hit **This tab** to detonate the page
-  you're on.
-- **Options** — set the backend ("detonation engine") URL.
+- **Check on click** — when enabled, intercepts a link click *before* navigation,
+  detonates the URL in the sandbox, and shows a verdict overlay: **safe** links open
+  normally; **suspicious/dangerous** links show a warning/block with *Proceed* or
+  *Cancel*.
+- **Right-click → "Check this link with Sandboxed"** — opens a result window with the
+  verdict + screenshot. (Also "Check this page" on the current page.)
+- **Toolbar popup** — paste a link, or hit **This tab**, to check on demand. Remembers
+  your last input and shows the current mode.
+- **Settings** — choose the link-checking mode and the backend URL; persisted across
+  browser restarts via `chrome.storage.sync`.
 
-It talks to the same `POST /detonate` API as the web app; no link is ever opened
-in your real browser — only in the sandboxed headless browser on the backend.
+No link ever opens in your real browser during a check — only in the sandboxed headless
+browser on the backend.
+
+## Link-checking modes (Settings ⚙)
+
+| Mode | Behavior |
+|------|----------|
+| **Manual** (default) | Only checks when you right-click → *Check this link*. |
+| **On click** | Auto-checks every link before it opens. |
+| **Both** | Auto-check on click *and* the right-click option. |
 
 ## Install (developer mode)
 
 1. Start the backend: `cd ../backend && npm start` (defaults to `http://localhost:8787`).
-2. Open `chrome://extensions` (or `edge://extensions`).
-3. Turn on **Developer mode** (top-right).
-4. Click **Load unpacked** and select this `extension/` folder.
-5. Pin the Sandboxer icon, then click it (or right-click any link).
+2. Open `chrome://extensions` (or `edge://extensions`) → enable **Developer mode**.
+3. **Load unpacked** → select this `extension/` folder.
+4. Open the extension's **options** (or the popup ⚙) to pick a mode and set the backend URL.
 
-## Configure the backend URL
+## How it works (architecture)
 
-Click the ⚙ in the popup (or the extension's **Details → Extension options**):
-- Local dev: `http://localhost:8787`
-- Remote: your tunnel/deploy URL (e.g. an `https` ngrok address).
+- `content.js` — runs on every page; in click/both mode it intercepts link clicks and
+  shows a **shadow-DOM overlay** (isolated from page CSS) with the verdict.
+- `background.js` (service worker) — owns the context menus and is the **single place
+  that calls the backend**: the content script sends a `CHECK_URL` message and the
+  worker fetches with the extension's host permissions (avoiding page-CSP issues).
+- `core.js` — shared settings (`chrome.storage.sync`) + a `detonate()` with timeout and
+  friendly error mapping (*Backend unavailable / timed out*); loaded into the worker via
+  `importScripts` and into pages via `<script>`.
+- `popup` / `result` / `options` — the on-demand UI, the right-click result window, and
+  settings.
 
-> The extension requests `host_permissions: ["<all_urls>"]` so it can `fetch`
-> whatever backend URL you configure. For a published build you'd narrow this to
-> just your backend's origin.
+## Status messages
 
-## Files
+The UI surfaces clear states: **Checking…**, **Safe**, **Suspicious**, **Dangerous
+(blocked)**, and **Backend unavailable** (with a *Proceed anyway* / *Cancel* choice so a
+down backend never hard-blocks your browsing).
 
-| File | Role |
-|------|------|
-| `manifest.json` | MV3 manifest (permissions, action, options, background) |
-| `background.js` | Service worker — context-menu items, opens the result window |
-| `core.js` | Shared API client + result renderer (DOM-built, no `innerHTML`) |
-| `popup.html` / `popup.js` | Toolbar popup |
-| `result.html` / `result.js` | Detonation result window (from right-click) |
-| `options.html` / `options.js` | Backend URL setting |
-| `ui.css` | Shared "containment chamber" styling |
-| `icons/` | Toolbar / store icons |
+## Notes & limitations
 
-## Notes
-
-- Result rendering uses `textContent` / DOM nodes only — untrusted content from a
-  detonated page can't inject markup into the extension UI.
-- The backend URL is stored in `chrome.storage.sync`.
+- Result rendering uses DOM nodes / `textContent` only — a detonated page can't inject
+  markup into the extension UI.
+- Click interception covers plain left-clicks. Modifier/middle-clicks (open-in-new-tab
+  shortcuts) are intentionally left alone; use right-click → *Check this link* for those.
+- `host_permissions: ["<all_urls>"]` lets the worker reach whatever backend URL you
+  configure; a published build would narrow this to just your backend's origin.

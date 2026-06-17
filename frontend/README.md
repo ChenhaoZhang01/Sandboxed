@@ -1,4 +1,4 @@
-# Sandboxer — Frontend
+# Sandboxed — Frontend
 
 A single-file web app (no build step) that drives the [detonation backend](../backend).
 Paste or scan a suspicious link → it detonates in the sandbox → you get a verdict,

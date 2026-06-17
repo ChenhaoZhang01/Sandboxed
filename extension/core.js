@@ -1,36 +1,71 @@
-// Shared logic for the popup and the result window. Exposed as window.SBX.
-// All result rendering builds DOM with textContent (no innerHTML) so untrusted
-// page content from the detonated site can never inject markup here.
+// Shared logic for the popup, result window, options page, AND the background
+// service worker (loaded there via importScripts). Exposed as the global SBX.
+//
+// Only the render* helpers touch the DOM, and only inside function bodies, so
+// importScripts into the (DOM-less) service worker is safe.
 const SBX = (() => {
-  const DEFAULT_API = "http://localhost:8787";
+  const DEFAULTS = {
+    apiBase: "http://localhost:8787",
+    // How links get checked: "manual" (right-click only),
+    // "click" (intercept clicks), or "both".
+    checkMode: "manual",
+  };
 
-  function getApiBase() {
-    return new Promise((resolve) => {
-      chrome.storage.sync.get({ apiBase: DEFAULT_API }, (o) =>
-        resolve((o.apiBase || DEFAULT_API).replace(/\/$/, ""))
-      );
-    });
-  }
-
-  function setApiBase(value) {
+  // --- settings (persist across browser restarts via chrome.storage.sync) ---
+  function getSettings() {
     return new Promise((resolve) =>
-      chrome.storage.sync.set({ apiBase: (value || "").trim() }, resolve)
+      chrome.storage.sync.get(DEFAULTS, (o) =>
+        resolve({
+          apiBase: (o.apiBase || DEFAULTS.apiBase).replace(/\/$/, ""),
+          checkMode: o.checkMode || DEFAULTS.checkMode,
+        })
+      )
     );
   }
+  function setSettings(patch) {
+    return new Promise((resolve) => chrome.storage.sync.set(patch, resolve));
+  }
+  async function getApiBase() {
+    return (await getSettings()).apiBase;
+  }
 
-  async function detonate(url) {
+  // --- backend call with timeout + friendly errors ---
+  async function detonate(url, opts = {}) {
     const base = await getApiBase();
-    const res = await fetch(base + "/detonate", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ url }),
-    });
-    const data = await res.json().catch(() => ({}));
-    if (!res.ok) throw new Error(data.error || `Detonation failed (HTTP ${res.status})`);
+    const timeoutMs = opts.timeoutMs ?? 25000;
+    const controller = new AbortController();
+    const t = setTimeout(() => controller.abort(), timeoutMs);
+
+    let res;
+    try {
+      res = await fetch(base + "/detonate", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ url }),
+        signal: controller.signal,
+      });
+    } catch (err) {
+      clearTimeout(t);
+      if (err.name === "AbortError") {
+        throw new Error("Backend timed out — the page took too long to detonate.");
+      }
+      throw new Error("Backend unavailable at " + base + ".");
+    }
+    clearTimeout(t);
+
+    let data = {};
+    try {
+      data = await res.json();
+    } catch {
+      /* non-JSON body */
+    }
+    if (!res.ok) {
+      throw new Error(data.error || `Detonation failed (HTTP ${res.status}).`);
+    }
     return data;
   }
 
-  // --- small DOM helper ---
+  // --- small DOM helper (pages only) ---
   function el(tag, opts = {}, kids = []) {
     const n = document.createElement(tag);
     if (opts.class) n.className = opts.class;
@@ -83,7 +118,6 @@ const SBX = (() => {
   function renderResult(root, d) {
     const verdict = d.verdict || "safe";
 
-    // chamber: screenshot + glass + verdict stamp
     const chamberKids = [el("div", { class: "grid-bg" })];
     if (d.screenshotBase64) {
       chamberKids.push(
@@ -100,7 +134,6 @@ const SBX = (() => {
     chamberKids.push(stamp);
     const chamber = el("div", { class: "chamber" }, chamberKids);
 
-    // meta grid
     const meta = (k, v) =>
       el("div", { class: "meta" }, [
         el("div", { class: "k", text: k }),
@@ -109,14 +142,10 @@ const SBX = (() => {
     const grid = el("div", { class: "readout-grid" }, [
       meta("Final destination", d.finalHost || hostOf(d.finalUrl) || "—"),
       meta("Domain age", formatAge(d.intel && d.intel.domainAge)),
-      meta(
-        "Redirects",
-        (d.redirectCount ?? 0) + (d.redirectCount === 1 ? " hop" : " hops")
-      ),
+      meta("Redirects", (d.redirectCount ?? 0) + (d.redirectCount === 1 ? " hop" : " hops")),
       meta("Page title", d.title || "—"),
     ]);
 
-    // trajectory
     const traj = el("ul", { class: "traj" });
     const chain = d.redirectChain || [];
     if (!chain.length) {
@@ -132,7 +161,6 @@ const SBX = (() => {
       });
     }
 
-    // reasons
     const reasons = el("ul", { class: "reasons" });
     const list = d.reasons || [];
     if (!list.length) {
@@ -168,5 +196,18 @@ const SBX = (() => {
     );
   }
 
-  return { DEFAULT_API, getApiBase, setApiBase, detonate, renderLoading, renderError, renderResult };
+  return {
+    DEFAULTS,
+    getSettings,
+    setSettings,
+    getApiBase,
+    detonate,
+    hostOf,
+    renderLoading,
+    renderError,
+    renderResult,
+  };
 })();
+
+// Make available to the service worker global when loaded via importScripts.
+if (typeof self !== "undefined") self.SBX = SBX;

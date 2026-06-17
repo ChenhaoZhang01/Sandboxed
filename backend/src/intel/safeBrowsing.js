@@ -12,7 +12,7 @@ export async function checkSafeBrowsing(url) {
   if (!API_KEY) return { skipped: true };
 
   const body = {
-    client: { clientId: "shadowbox", clientVersion: "0.1.0" },
+    client: { clientId: "sandboxed", clientVersion: "0.1.0" },
     threatInfo: {
       threatTypes: [
         "MALWARE",

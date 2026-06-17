@@ -7,26 +7,23 @@
   <body class="popup">
     <div class="sbx-head">
       <span class="glyph" aria-hidden="true"></span>
-      <span class="name">Sandboxer</span>
+      <span class="name">Sandboxed</span>
       <a href="#" id="opts" class="gear" title="Settings">⚙</a>
     </div>
     <div class="sbx-body">
       <input
         id="url"
         class="url-input"
-        placeholder="paste a link to detonate…"
+        placeholder="paste a link to check…"
         spellcheck="false"
         autocomplete="off"
       />
       <div class="actions">
-        <button id="go" class="btn btn-primary">Detonate</button>
+        <button id="go" class="btn btn-primary">Check</button>
         <button id="tab" class="btn btn-ghost" type="button">This tab</button>
       </div>
       <div id="result"></div>
-      <p class="hint">
-        Right-click any link on a page → <b>Detonate link in Sandboxer</b> to check
-        it without opening it.
-      </p>
+      <div class="mode-line" id="modeLine"></div>
     </div>
     <script src="core.js"></script>
     <script src="popup.js"></script>

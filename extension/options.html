@@ -2,13 +2,13 @@
 <html lang="en">
   <head>
     <meta charset="utf-8" />
-    <title>Sandboxer — settings</title>
+    <title>Sandboxed — settings</title>
     <link rel="stylesheet" href="ui.css" />
   </head>
   <body class="popup">
     <div class="sbx-head">
       <span class="glyph" aria-hidden="true"></span>
-      <span class="name">Sandboxer Settings</span>
+      <span class="name">Sandboxed Settings</span>
     </div>
     <div class="sbx-body">
       <label class="opt-field" for="api">Detonation engine URL</label>
@@ -19,15 +19,31 @@
         spellcheck="false"
         autocomplete="off"
       />
+      <p class="hint">
+        Point this at your running backend — <b>http://localhost:8787</b> for local dev,
+        or a tunnel/deploy URL (e.g. an ngrok <b>https</b> address).
+      </p>
+
+      <label class="opt-field">When should links be checked?</label>
+      <div class="modes">
+        <label class="mode-opt">
+          <input type="radio" name="mode" value="manual" />
+          <span><b>Manually</b> — only when I right-click → “Check this link”</span>
+        </label>
+        <label class="mode-opt">
+          <input type="radio" name="mode" value="click" />
+          <span><b>On click</b> — check every link automatically before it opens</span>
+        </label>
+        <label class="mode-opt">
+          <input type="radio" name="mode" value="both" />
+          <span><b>Both</b> — auto-check on click <i>and</i> the right-click option</span>
+        </label>
+      </div>
+
       <div class="actions">
         <button id="save" class="btn btn-primary">Save</button>
         <span id="saved" class="opt-saved" hidden>Saved</span>
       </div>
-      <p class="hint">
-        Point this at your running backend. Use <b>http://localhost:8787</b> for local
-        dev, or your tunnel/deploy URL (e.g. an ngrok <b>https</b> address) to use the
-        extension against a remote engine.
-      </p>
     </div>
     <script src="core.js"></script>
     <script src="options.js"></script>
