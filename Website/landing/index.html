@@ -1,0 +1,124 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <link rel="icon" href="data:," />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta
+      name="description"
+      content="Sandboxed — open suspicious links and QR codes in a disposable sandbox, follow every redirect, and get a risk verdict before anything touches your device."
+    />
+    <title>Sandboxed — Detonate links before you click</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,700;12..96,800&family=Inter:wght@300;400;500&family=Space+Mono:wght@400;700&display=swap"
+      rel="stylesheet"
+    />
+  </head>
+  <body>
+    <div id="stage">
+      <!-- ============ Section 1 — The problem (title centered, uppercase) ============ -->
+      <section class="panel s1 is-active" data-index="0">
+        <div class="layer-bg" style="background-image: url('/images/tech1.png')"></div>
+        <div class="scrim"></div>
+        <div class="content content--center">
+          <div class="reveal">
+            <p class="eyebrow">01 — The problem</p>
+            <h1 class="headline">One click is all it takes</h1>
+            <p class="copy">
+              Phishing pages, fake logins, and malicious QR codes look identical to the real
+              thing. By the time a link finishes loading, your passwords or money can already
+              be gone.
+            </p>
+          </div>
+        </div>
+      </section>
+
+      <!-- ====== Section 2 — How it works (title bottom-right, copy upper-left) ====== -->
+      <section class="panel s2" data-index="1">
+        <div class="layer-bg" style="background-image: url('/images/tech2.png')"></div>
+        <div class="scrim"></div>
+        <div class="content">
+          <div class="pos pos--top-left">
+            <div class="reveal">
+              <p class="eyebrow">02 — How it works</p>
+              <p class="copy">
+                Paste a link or scan a QR code. Sandboxed opens it in a disposable browser far
+                from your device, follows every redirect, screenshots the real page, and scores
+                the risk — then tells you in plain language exactly why.
+              </p>
+            </div>
+          </div>
+          <div class="pos pos--bottom-right">
+            <div class="reveal">
+              <h2 class="headline">detonated, not clicked.</h2>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ========= Section 3 — Get started (title left, copy right) ========= -->
+      <section class="panel s3" data-index="2">
+        <div class="layer-bg" style="background-image: url('/images/tech3.png')"></div>
+        <div class="scrim"></div>
+        <div class="content">
+          <div class="pos pos--left">
+            <div class="reveal">
+              <p class="eyebrow">03 — Get started</p>
+              <h2 class="headline">check before you click.</h2>
+              <a class="cta" href="#" data-cta>Try Sandboxed <span aria-hidden="true">→</span></a>
+            </div>
+          </div>
+          <div class="pos pos--right">
+            <div class="reveal">
+              <p class="copy">
+                Free to try — in your browser, as an installable app, or a one-click extension.
+                Suspicious links open in the sandbox, never on your device, so there's nothing
+                to clean up if they turn out to be malicious.
+              </p>
+            </div>
+          </div>
+        </div>
+      </section>
+    </div>
+
+    <div id="grain"></div>
+
+    <!-- ===================== fixed UI overlays ===================== -->
+    <nav class="ui nav">
+      <div class="brand">Sandboxed</div>
+      <div class="nav-links">
+        <a href="#" data-go="0">Problem</a>
+        <a href="#" data-go="1">How it works</a>
+        <a href="#" data-go="2">Get started</a>
+      </div>
+    </nav>
+
+    <div class="ui scroll-left">
+      <span class="label">Scroll</span>
+      <div class="scroll-track"></div>
+    </div>
+
+    <div class="ui scroll-right">
+      <span class="counter"><b id="cur">01</b> / 03</span>
+      <span class="arrow"></span>
+    </div>
+
+    <div class="ui dots" role="tablist" aria-label="Sections">
+      <button class="dot is-active" data-index="0" data-num="01" aria-label="Go to section 1"><i></i></button>
+      <button class="dot" data-index="1" data-num="02" aria-label="Go to section 2"><i></i></button>
+      <button class="dot" data-index="2" data-num="03" aria-label="Go to section 3"><i></i></button>
+    </div>
+
+    <footer class="ui footer">
+      <div class="socials">
+        <a href="#">GitHub</a>
+        <a href="#">X / Twitter</a>
+      </div>
+      <a class="mail" href="#" data-cta>Check before you click →</a>
+    </footer>
+
+    <script type="module" src="/src/main.js"></script>
+  </body>
+</html>
