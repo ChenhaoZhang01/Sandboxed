@@ -1,5 +1,6 @@
 import { getDomainAge } from "./intel/rdap.js";
 import { checkSafeBrowsing } from "./intel/safeBrowsing.js";
+import { classifySignalThreats } from "./threatSignals.js";
 
 // Weighted scoring. Each rule contributes points + a human-readable reason.
 // 0–24 safe, 25–59 suspicious, 60+ dangerous.
@@ -20,6 +21,10 @@ export async function scoreRisk(report) {
 
   const s = report.signals || {};
   const host = s.finalHost || "";
+  const runtimeThreatSummary = classifySignalThreats(s);
+
+  score += runtimeThreatSummary.score;
+  reasons.push(...runtimeThreatSummary.reasons);
 
   // --- Threat intelligence ---
   const [domainAge, safeBrowsing] = await Promise.all([

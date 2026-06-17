@@ -14,7 +14,10 @@ verdict — **without the link ever touching the user's device.**
 3. **Screenshots** the landing page (base64 JPEG).
 4. Extracts **behavioral signals**: password fields, payment fields, cross-domain
    credential POSTs, brand impersonation, auto-downloads, meta-refresh, insecure HTTP.
-5. Enriches with **domain age** (RDAP, free, no key) and optional **Google Safe Browsing**.
+5. Adds **runtime threat instrumentation** for clipboard hooks, `eval`/Function usage,
+   keystroke listeners, pop-under/window-open behavior, crypto-wallet provider hooks
+   (`window.ethereum` / `window.solana`), typosquat lookalikes, and TLS/certificate checks.
+6. Enriches with **domain age** (RDAP, free, no key) and optional **Google Safe Browsing**.
 6. Returns a **verdict** (`safe` / `suspicious` / `dangerous`) + scored reasons + screenshot.
 
 ## Run it (local dev)
@@ -32,6 +35,12 @@ Detonate a URL:
 curl -s -X POST http://localhost:8787/detonate \
   -H "Content-Type: application/json" \
   -d '{"url":"https://example.com"}'
+```
+
+Run the full automated tests (credential detection + new runtime/TLS/typosquat coverage):
+
+```bash
+npm test
 ```
 
 Run the offline phishing-fixture test (proves the credential-detection path):
