@@ -33,6 +33,11 @@ export async function getBrowser() {
         "--disable-setuid-sandbox",
         "--disable-dev-shm-usage",
         "--disable-gpu",
+        // Railway's container runtime blocks the syscalls Chrome's zygote uses to
+        // drop capabilities, so it crashes at sandbox/credentials.cc even with
+        // --no-sandbox. Disabling the zygote + single-process avoids that path.
+        "--no-zygote",
+        "--single-process",
       ],
     });
   }

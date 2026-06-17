@@ -5,7 +5,7 @@
 // importScripts into the (DOM-less) service worker is safe.
 const SBX = (() => {
   const DEFAULTS = {
-    apiBase: "https://sandboxed-backend.onrender.com",
+    apiBase: "https://sandboxed-backend-production.up.railway.app",
     // How links get checked: "manual" (right-click only),
     // "click" (intercept clicks), or "both".
     checkMode: "manual",
