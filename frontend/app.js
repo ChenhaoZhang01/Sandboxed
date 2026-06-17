@@ -1,5 +1,5 @@
 const $ = (id) => document.getElementById(id);
-const DEFAULT_API = "https://sandboxed.fly.dev";
+const DEFAULT_API = "https://sandboxed-backend-production.up.railway.app";
 
 // --- API base, persisted ---
 const apiInput = $("api");
@@ -30,6 +30,9 @@ const browseBtn = $("pdf-browse-btn");
 const dropzoneStatus = $("dropzone-status");
 const scanResult = $("scan-result");
 
+//Settings
+const historySwitch = $("historySwitch")
+
 function setStatus(state, text) {
   status.dataset.state = state;
   statusText.textContent = text;
@@ -53,80 +56,66 @@ function normalize(u) {
     return u.replace(/^https?:\/\//, "").replace(/\/$/, "");
   }
 }
-async function detonate(url, opts = {}) {
-  const base = await getApiBase();
-  const timeoutMs = opts.timeoutMs ?? 25000;
-
-  const controller = new AbortController();
-  const t = setTimeout(() => controller.abort(), timeoutMs);
+async function detonate(rawUrl) {
+  const verifiedLinks = await fetchVerifiedLinks()
+  console.log(verifiedLinks)
+  const url = (rawUrl ?? urlInput.value).trim();
+  if (!url) {
+    urlInput.focus();
+    return;
+  }
+  urlInput.value = url;
+  resetView();
+  spinner.classList.remove("hidden");
+  goBtn.disabled = true;
+  setStatus("running", "Detonating");
+  consoleState.textContent = "Working";
 
   try {
-    let verifiedLinks = [];
-    try {
-      const vres = await fetch(base + "/verified-links");
-      const vdata = await vres.json();
-      verifiedLinks = Array.isArray(vdata?.data) ? vdata.data : [];
-    } catch {
-      verifiedLinks = [];
-    }
+    if($("historySwitch").checked){
+      const match = verifiedLinks.find(
+        (x) => normalize(x.url) === normalize(url)
+      );
 
-    const normalize = (u) => {
-      try {
-        const url = new URL(u.includes("://") ? u : "http://" + u);
-        return url.hostname.replace(/^www\./, "");
-      } catch {
-        return u
-          .replace(/^https?:\/\//, "")
-          .replace(/^www\./, "")
-          .split(/[/?#]/)[0]
-          .replace(/\/$/, "");
+      if (match) {
+        console.log("eee")
+        spinner.classList.add("hidden");
+        render(match.data);
+        return;
       }
-    };
-
-    const match = verifiedLinks.find(
-      (x) => normalize(x.url) === normalize(url)
-    );
-
-    if (match) {
-      console.log("in verified links!");
-      return match.data;
     }
-
-    const res = await fetch(base + "/detonate", {
+    const res = await fetch(apiBase() + "/detonate", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ url }),
-      signal: controller.signal,
     });
 
-    let data = {};
-    try {
-      data = await res.json();
-    } catch {}
+    const data = await res.json();
+    spinner.classList.add("hidden");
 
     if (!res.ok) {
-      throw new Error(data.error || `Detonation failed (HTTP ${res.status}).`);
+      showError(data.error || "Detonation failed.");
+      return;
     }
-
-    try {
-      await fetch(base + "/verified-links/add", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ url, data }),
-      });
-    } catch (e) {
-      console.warn("failed to store verified link:", e.message);
-    }
-
-    return data;
-
+    await fetch(apiBase() + "/verified-links/add", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        url,
+        data, 
+      }),
+    });
+    render(data);
   } catch (err) {
-    if (err.name === "AbortError") {
-      throw new Error("Backend timed out — the page took too long to detonate.");
-    }
-    throw new Error("Backend unavailable at " + base + ". (" + err.message + ")");
+    spinner.classList.add("hidden");
+    showError(
+      "Could not reach the detonation engine at " +
+        apiBase() +
+        ". Is the backend running? " +
+        "(" + err.message + ")"
+    );
   } finally {
-    clearTimeout(t);
+    goBtn.disabled = false;
   }
 }
 

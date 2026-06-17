@@ -14,6 +14,7 @@ const SBX = (() => {
       safeBrowsing: true,
       phishingEnrichment: false,
     },
+    historyEnabled: true,
   };
 
   // --- settings (persist across browser restarts via chrome.storage.sync) ---
@@ -31,6 +32,7 @@ const SBX = (() => {
         resolve({
           apiBase: (o.apiBase || DEFAULTS.apiBase).replace(/\/$/, ""),
           checkMode: o.checkMode || DEFAULTS.checkMode,
+          historyEnabled: o.historyEnabled ?? true,
           analysisLayers: normalizeAnalysisLayers(o.analysisLayers),
         })
       )
@@ -52,16 +54,6 @@ async function detonate(url, opts = {}) {
   const controller = new AbortController();
   const t = setTimeout(() => controller.abort(), timeoutMs);
 
-  try {
-    let verifiedLinks = [];
-    try {
-      const vres = await fetch(base + "/verified-links");
-      const vdata = await vres.json();
-      verifiedLinks = Array.isArray(vdata?.data) ? vdata.data : [];
-    } catch {
-      verifiedLinks = [];
-    }
-
     const normalize = (u) => {
       try {
         const url = new URL(u.includes("://") ? u : "http://" + u);
@@ -75,14 +67,22 @@ async function detonate(url, opts = {}) {
       }
     };
 
-    const match = verifiedLinks.find(
-      (x) => normalize(x.url) === normalize(url)
-    );
+  try {
+    if (settings.historyEnabled) {
+      let verifiedLinks = [];
+      try {
+        const vres = await fetch(base + "/verified-links");
+        const vdata = await vres.json();
+        verifiedLinks = Array.isArray(vdata?.data) ? vdata.data : [];
+      } catch {}
 
-    // 3. shortcut: already verified
-    if (match) {
-      console.log("in verified links!");
-      return match.data;
+      const match = verifiedLinks.find(
+        (x) => normalize(x.url) === normalize(url)
+      );
+
+      if (match) {
+        return match.data;
+      }
     }
 
     const res = await fetch(base + "/detonate", {
