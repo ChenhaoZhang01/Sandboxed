@@ -59,6 +59,26 @@
             let streak = 0;
             let best = 0;
 
+            // Daily leaderboard submission. Uses the same backend the app/extension
+            // use; honors a custom API set in the main app (localStorage key).
+            const API_BASE = (localStorage.getItem("sandboxed_api") || "https://sandboxed.fly.dev").replace(/\/$/, "");
+            let scoreSubmitted = false;
+            async function submitScore(score) {
+              if (scoreSubmitted) return;
+              scoreSubmitted = true;
+              const name = (prompt("Round over! Enter a name for today's leaderboard (cancel to skip):", "") || "").trim();
+              if (!name) return;
+              try {
+                await fetch(API_BASE + "/leaderboard", {
+                  method: "POST",
+                  headers: { "Content-Type": "application/json" },
+                  body: JSON.stringify({ name, score }),
+                });
+              } catch (e) {
+                /* best-effort — never block the game */
+              }
+            }
+
             function showQuestion() {
             const q = questions[currentQuestion];
 
@@ -104,10 +124,15 @@
             function showGameOver() {
             document.getElementById("progress").style.width = "0%";
 
+            submitScore(streak);
+
             document.getElementById("phishingQuestion").innerHTML = `
                 <h2>Game Over</h2>
                 <p>You lost after getting ${streak} correct.</p>
                 <button class="answer-btn" type="button" onclick="restartGame()">Play Again</button>
+                <a href="/leaderboard.html" class="game-link">
+                <button class="answer-btn" type="button">Leaderboard</button>
+                </a>
                 <a href="index.html" class="game-link">
                 <button class="answer-btn" type="button">Exit</button>
                 </a>
@@ -125,12 +150,17 @@
                 document.getElementById("streak").textContent = finalScore;
                 document.getElementById("best").textContent = best;
                 document.getElementById("progress").style.width = "100%";
-        
+
+                submitScore(finalScore);
+
                 document.getElementById("phishingQuestion").innerHTML = `
                     <h2>You Win!</h2>
                     <p>You spotted all the phishing traps.</p>
                     <p>Final Score: ${streak}</p>
                     <button class="answer-btn" type="button" onclick="restartGame()">Play Again</button>
+                    <a href="/leaderboard.html" class="game-link">
+                    <button class="answer-btn" type="button">Leaderboard</button>
+                    </a>
                     <a href="index.html" class = "game-link">
                     <button class="answer-btn" type="button">Exit</button>
                     </a>
@@ -142,6 +172,7 @@
             function restartGame() {
             currentQuestion = 0;
             streak = 0;
+            scoreSubmitted = false;
             showQuestion();
             }
 

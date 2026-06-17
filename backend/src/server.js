@@ -137,6 +137,69 @@ app.post("/verified-links/add", async (req, res) => {
   }
 });
 
+// --- Spot-the-Phish leaderboard ---
+// Same JSON-file pattern as verified-links. Ephemeral demo data (gitignored).
+const LEADERBOARD_PATH = path.join(__dirname, "../leaderboard.json");
+const LEADERBOARD_TOP = 50;
+const LEADERBOARD_KEEP = 1000;
+
+function startOfTodayMs() {
+  const d = new Date();
+  d.setHours(0, 0, 0, 0);
+  return d.getTime();
+}
+
+async function readLeaderboard() {
+  try {
+    const raw = await readFile(LEADERBOARD_PATH, "utf8");
+    const data = JSON.parse(raw);
+    return Array.isArray(data) ? data : [];
+  } catch {
+    return [];
+  }
+}
+
+app.get("/leaderboard", async (req, res) => {
+  try {
+    const entries = await readLeaderboard();
+    const since = req.query.period === "all" ? 0 : startOfTodayMs();
+    const data = entries
+      .filter((e) => e && typeof e.score === "number" && e.ts >= since)
+      .sort((a, b) => b.score - a.score)
+      .slice(0, LEADERBOARD_TOP);
+    res.json({ ok: true, data });
+  } catch (err) {
+    res.status(500).json({ error: "Failed to load leaderboard" });
+  }
+});
+
+app.post("/leaderboard", async (req, res) => {
+  try {
+    const rawScore = Number(req.body?.score);
+    if (!Number.isFinite(rawScore)) {
+      return res.status(400).json({ error: "score must be a number" });
+    }
+    const score = Math.max(0, Math.min(9999, Math.floor(rawScore)));
+    const name =
+      String(req.body?.name ?? "")
+        .trim()
+        .replace(/[^\w \-]/g, "")
+        .slice(0, 12) || "ANON";
+
+    const entries = await readLeaderboard();
+    const entry = { name, score, ts: Date.now() };
+    entries.push(entry);
+    // Cap file growth — keep the most recent submissions only.
+    const trimmed = entries.slice(-LEADERBOARD_KEEP);
+    await writeFile(LEADERBOARD_PATH, JSON.stringify(trimmed, null, 2), "utf8");
+
+    res.json({ ok: true, entry });
+  } catch (err) {
+    console.error("leaderboard add failed:", err);
+    res.status(500).json({ error: "Failed to record score" });
+  }
+});
+
 const PDF_SCAN_LIMIT = `${Number(process.env.PDF_SCAN_MAX_MB || 20)}mb`;
 
 /**

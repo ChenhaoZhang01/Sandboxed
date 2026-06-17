@@ -91,6 +91,9 @@ async function detonate(rawUrl) {
       body: JSON.stringify({
         url,
         analysisLayers: {
+          domainAge: $("domainAgeSwitch").checked,
+          safeBrowsing: $("safeBrowsingSwitch").checked,
+          phishingEnrichment: $("phishingSwitch").checked,
           recordReplay: $("replaySwitch").checked,
           credentialTrap: $("trapSwitch").checked,
         },
