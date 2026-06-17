@@ -35,7 +35,13 @@ app.post("/detonate", async (req, res) => {
   try {
     const report = await detonate(url);
     const risk = await scoreRisk(report);
-    const phishing = await checkForPhishing(report)
+    // Clone-detection is enrichment — a failure here must not fail the detonation.
+    let phishing = null;
+    try {
+      phishing = await checkForPhishing(report);
+    } catch (err) {
+      console.error("phishing check failed (non-fatal):", err.message || err);
+    }
     console.log("phshing check!! ", phishing)
 
     res.json({
