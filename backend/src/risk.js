@@ -92,6 +92,21 @@ export async function scoreRisk(report, options = {}) {
     add(5, "Uses a meta-refresh auto-redirect");
   }
 
+  // --- Credential trap (dynamic proof) ---
+  // The sandbox typed canary credentials and watched where the form tried to ship
+  // them. A cross-domain destination is hard proof of credential theft — stronger
+  // than the static crossDomainCredPost heuristic above.
+  if (report.credentialTrap && report.credentialTrap.blocked) {
+    if (report.credentialTrap.crossDomain) {
+      add(
+        35,
+        `Sandbox proved the password is sent off-domain to ${report.credentialTrap.host} (blocked)`
+      );
+    } else {
+      add(5, `Sandbox captured the credential submission to ${report.credentialTrap.host} (blocked)`);
+    }
+  }
+
   // --- HTTP/transport ---
   try {
     const proto = new URL(report.finalUrl || report.requestedUrl).protocol;

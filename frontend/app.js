@@ -46,6 +46,7 @@ function resetView() {
   stamp.classList.add("hidden");
   stamp.classList.remove("stamp-in");
   idle.classList.add("hidden");
+  teardownExtras();
 }
 
 function normalize(u) {
@@ -87,7 +88,13 @@ async function detonate(rawUrl) {
     const res = await fetch(apiBase() + "/detonate", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ url }),
+      body: JSON.stringify({
+        url,
+        analysisLayers: {
+          recordReplay: $("replaySwitch").checked,
+          credentialTrap: $("trapSwitch").checked,
+        },
+      }),
     });
 
     const data = await res.json();
@@ -97,12 +104,15 @@ async function detonate(rawUrl) {
       showError(data.error || "Detonation failed.");
       return;
     }
+    // Don't persist the replay frames in the verified-links cache — they're large
+    // base64 JPEGs and would bloat the store. Everything else is kept.
+    const { replayFrames, ...cacheable } = data;
     await fetch(apiBase() + "/verified-links/add", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         url,
-        data, 
+        data: cacheable,
       }),
     });
     render(data);
@@ -254,6 +264,9 @@ function render(d) {
 
   // phishing
   renderPhishing(d.phishing);
+  renderTrap(d.credentialTrap);
+  setupReplay(d.replayFrames || []);
+  setupLive(d.finalUrl || d.requestedUrl || urlInput.value);
 
   renderTrajectory(d.redirectChain || []);
   renderReasons(d.reasons || []);
@@ -324,6 +337,237 @@ function renderReasons(reasons) {
     ul.appendChild(li);
   });
 }
+
+// ---------- password trap ----------
+function renderTrap(t) {
+  const el = $("m-trap");
+  if (!el) return;
+  if (!t) {
+    el.textContent = "—";
+    el.className = "v";
+    return;
+  }
+  if (t.blocked) {
+    el.innerHTML =
+      (t.crossDomain
+        ? "⚠️ Password would be sent off-domain to "
+        : "Captured submission to ") +
+      "<strong>" + escapeHtml(t.host || "?") + "</strong> — blocked, never sent";
+    el.className = "v " + (t.crossDomain ? "phishing-warn" : "phishing-ok");
+  } else if (t.attempted) {
+    el.textContent = "Filled canary creds; no submission captured.";
+    el.className = "v";
+  } else {
+    el.textContent = "No login form to trap.";
+    el.className = "v";
+  }
+}
+
+// ---------- replay player ----------
+// Scrubs the screencast frames captured during detonation through the chamber's
+// existing screenshot <img> (the verdict stamp + blast glass stay overlaid).
+let replayFrames = [];
+let replayIdx = 0;
+let replayTimer = null;
+const chamberTools = $("chamber-tools");
+const replayControls = $("replay-controls");
+const replayPlayBtn = $("replay-play");
+const replayScrub = $("replay-scrub");
+const replayTime = $("replay-time");
+
+function showFrame(i) {
+  if (!replayFrames.length) return;
+  replayIdx = Math.max(0, Math.min(replayFrames.length - 1, i));
+  shot.src = "data:image/jpeg;base64," + replayFrames[replayIdx].data;
+  shot.classList.remove("hidden");
+  replayScrub.value = String(replayIdx);
+  replayTime.textContent = replayIdx + 1 + " / " + replayFrames.length;
+}
+function stopReplay() {
+  if (replayTimer) {
+    clearInterval(replayTimer);
+    replayTimer = null;
+  }
+  replayPlayBtn.textContent = "▶ Replay";
+}
+function playReplay() {
+  if (replayTimer) {
+    stopReplay();
+    return;
+  }
+  if (replayIdx >= replayFrames.length - 1) replayIdx = -1;
+  replayPlayBtn.textContent = "⏸ Pause";
+  replayTimer = setInterval(() => {
+    if (replayIdx >= replayFrames.length - 1) {
+      stopReplay();
+      return;
+    }
+    showFrame(replayIdx + 1);
+  }, 350);
+}
+function setupReplay(frames) {
+  replayFrames = Array.isArray(frames) ? frames : [];
+  stopReplay();
+  if (!replayFrames.length) {
+    replayControls.classList.add("hidden");
+    return;
+  }
+  chamberTools.classList.remove("hidden");
+  replayControls.classList.remove("hidden");
+  replayScrub.max = String(replayFrames.length - 1);
+  replayScrub.value = "0";
+  replayIdx = 0;
+  replayTime.textContent = "1 / " + replayFrames.length;
+}
+replayPlayBtn.addEventListener("click", playReplay);
+replayScrub.addEventListener("input", () => {
+  stopReplay();
+  showFrame(Number(replayScrub.value));
+});
+
+// ---------- live interactive sandbox ----------
+const liveCanvas = $("live-canvas");
+const liveStartBtn = $("live-start");
+const liveStopBtn = $("live-stop");
+const liveNote = $("live-note");
+const liveCtx = liveCanvas.getContext("2d");
+let liveSocket = null;
+let liveUrl = null;
+let liveVW = 1280;
+let liveVH = 800;
+const liveImg = new Image();
+liveImg.onload = () => liveCtx.drawImage(liveImg, 0, 0, liveCanvas.width, liveCanvas.height);
+
+function wsBase() {
+  return apiBase().replace(/^http/i, "ws");
+}
+function setupLive(url) {
+  liveUrl = url;
+  if ($("liveSwitch").checked && url) {
+    chamberTools.classList.remove("hidden");
+    liveStartBtn.classList.remove("hidden");
+  } else {
+    liveStartBtn.classList.add("hidden");
+  }
+}
+function startLive() {
+  if (!liveUrl || liveSocket) return;
+  liveNote.textContent = "connecting…";
+  liveStartBtn.classList.add("hidden");
+  let sock;
+  try {
+    sock = new WebSocket(wsBase() + "/live?url=" + encodeURIComponent(liveUrl));
+  } catch {
+    liveNote.textContent = "could not connect";
+    liveStartBtn.classList.remove("hidden");
+    return;
+  }
+  liveSocket = sock;
+  sock.onmessage = (ev) => {
+    let m;
+    try {
+      m = JSON.parse(ev.data);
+    } catch {
+      return;
+    }
+    if (m.type === "ready") {
+      liveVW = (m.viewport && m.viewport.width) || 1280;
+      liveVH = (m.viewport && m.viewport.height) || 800;
+      liveCanvas.width = liveVW;
+      liveCanvas.height = liveVH;
+      shot.classList.add("hidden");
+      liveCanvas.classList.remove("hidden");
+      liveStopBtn.classList.remove("hidden");
+      liveNote.textContent = "live — click & type in the sandbox";
+      liveCanvas.focus();
+    } else if (m.type === "frame") {
+      liveImg.src = "data:image/jpeg;base64," + m.data;
+    } else if (m.type === "error") {
+      liveNote.textContent = m.message || "live error";
+      stopLive();
+    } else if (m.type === "closed") {
+      liveNote.textContent = "session ended (" + (m.reason || "closed") + ")";
+      stopLive();
+    }
+  };
+  sock.onclose = () => {
+    if (liveSocket === sock) stopLive();
+  };
+  sock.onerror = () => {
+    liveNote.textContent = "connection error";
+  };
+}
+function stopLive() {
+  if (liveSocket) {
+    try {
+      liveSocket.close();
+    } catch {}
+    liveSocket = null;
+  }
+  liveCanvas.classList.add("hidden");
+  liveStopBtn.classList.add("hidden");
+  if ($("liveSwitch").checked && liveUrl) liveStartBtn.classList.remove("hidden");
+}
+// Reset all replay/live UI between detonations (called from resetView).
+function teardownExtras() {
+  stopReplay();
+  if (replayControls) replayControls.classList.add("hidden");
+  if (liveStartBtn) liveStartBtn.classList.add("hidden");
+  if (chamberTools) chamberTools.classList.add("hidden");
+  if (liveNote) liveNote.textContent = "";
+  stopLive();
+}
+
+// live input → control messages (coords scaled to the sandbox viewport)
+function liveCoords(e) {
+  const r = liveCanvas.getBoundingClientRect();
+  return {
+    x: (e.clientX - r.left) * (liveVW / r.width),
+    y: (e.clientY - r.top) * (liveVH / r.height),
+  };
+}
+function liveSend(obj) {
+  if (liveSocket && liveSocket.readyState === WebSocket.OPEN) {
+    liveSocket.send(JSON.stringify(obj));
+  }
+}
+let lastLiveMove = 0;
+liveCanvas.addEventListener("mousedown", (e) => {
+  e.preventDefault();
+  liveCanvas.focus();
+  liveSend({ type: "mouse", action: "down", button: e.button === 2 ? "right" : "left", ...liveCoords(e) });
+});
+liveCanvas.addEventListener("mouseup", (e) => {
+  liveSend({ type: "mouse", action: "up", button: e.button === 2 ? "right" : "left", ...liveCoords(e) });
+});
+liveCanvas.addEventListener("mousemove", (e) => {
+  const now = Date.now();
+  if (now - lastLiveMove < 40) return;
+  lastLiveMove = now;
+  liveSend({ type: "mouse", action: "move", ...liveCoords(e) });
+});
+liveCanvas.addEventListener(
+  "wheel",
+  (e) => {
+    e.preventDefault();
+    liveSend({ type: "wheel", deltaX: e.deltaX, deltaY: e.deltaY, ...liveCoords(e) });
+  },
+  { passive: false }
+);
+liveCanvas.addEventListener("contextmenu", (e) => e.preventDefault());
+const LIVE_KEYS = ["Enter", "Backspace", "Tab", "Delete", "Escape", "ArrowLeft", "ArrowUp", "ArrowRight", "ArrowDown", "Home", "End"];
+liveCanvas.addEventListener("keydown", (e) => {
+  if (!liveSocket) return;
+  if (e.key.length === 1 && !e.ctrlKey && !e.metaKey) {
+    liveSend({ type: "text", text: e.key });
+    e.preventDefault();
+  } else if (LIVE_KEYS.includes(e.key)) {
+    liveSend({ type: "key", key: e.key });
+    e.preventDefault();
+  }
+});
+liveStartBtn.addEventListener("click", startLive);
+liveStopBtn.addEventListener("click", stopLive);
 
 // --- helpers ---
 function hostOf(u) {

@@ -1,10 +1,14 @@
 import puppeteer from "puppeteer";
 import { isBlockedUrl, isBlockedLiteral } from "./ssrf.js";
 import { detectTyposquat, inspectTlsSecurity } from "./threatSignals.js";
+import { makeCanary, fillCredentialForm, matchCanaryHit } from "./credentialTrap.js";
 
 const DETONATE_TIMEOUT_MS = Number(process.env.DETONATE_TIMEOUT_MS || 30000);
 const MAX_REDIRECTS = Number(process.env.MAX_REDIRECTS || 15);
 const SCREENSHOT_DELAY_MS = Number(process.env.SCREENSHOT_DELAY_MS || 1500);
+// Recorded-replay screencast tuning + how long to wait for the canary submission.
+const REPLAY_MAX_FRAMES = Number(process.env.REPLAY_MAX_FRAMES || 30);
+const CREDENTIAL_TRAP_WAIT_MS = Number(process.env.CREDENTIAL_TRAP_WAIT_MS || 3000);
 
 // A realistic UA so phishing kits behave normally (many cloak against headless).
 const USER_AGENT =
@@ -191,7 +195,9 @@ async function installThreatHooks(page) {
  * @param {string} targetUrl
  * @returns {Promise<object>} raw detonation report (no verdict — that's risk.js)
  */
-export async function detonate(targetUrl) {
+export async function detonate(targetUrl, options = {}) {
+  const recordReplay = options.recordReplay !== false; // default on
+  const credentialTrapEnabled = options.credentialTrap === true; // opt-in
   const browser = await getBrowser();
   // Incognito context = clean cookies/storage per detonation (sandbox-ish).
   const context = await browser.createBrowserContext();
@@ -201,6 +207,17 @@ export async function detonate(targetUrl) {
   const downloads = [];
   const blocked = [];
   let mainStatus = null;
+
+  // Credential-trap state. Armed AFTER the main report is captured so the trap
+  // never perturbs scoring; the request handler below watches for the canary.
+  const canary = makeCanary();
+  let trapArmed = false;
+  let trapFinalHost = "";
+  let credentialTrapResult = null;
+
+  // Recorded-replay frames captured via CDP screencast (when enabled).
+  const replayFrames = [];
+  const replayStarted = Date.now();
 
   try {
     await installThreatHooks(page);
@@ -215,12 +232,47 @@ export async function detonate(targetUrl) {
       downloads.push({ url: e.url, suggestedFilename: e.suggestedFilename || null });
     });
 
+    // Recorded replay: stream the page as low-res JPEG frames so the user can
+    // scrub through what happened. Capped at REPLAY_MAX_FRAMES; we ack each frame
+    // (required by CDP) and stop the screencast before the final screenshot.
+    if (recordReplay) {
+      client.on("Page.screencastFrame", (frame) => {
+        if (replayFrames.length < REPLAY_MAX_FRAMES) {
+          replayFrames.push({ data: frame.data, offsetMs: Date.now() - replayStarted });
+        }
+        client
+          .send("Page.screencastFrameAck", { sessionId: frame.sessionId })
+          .catch(() => {});
+      });
+      await client.send("Page.enable").catch(() => {});
+      await client
+        .send("Page.startScreencast", {
+          format: "jpeg",
+          quality: 50,
+          maxWidth: 800,
+          maxHeight: 500,
+          everyNthFrame: 1,
+        })
+        .catch(() => {});
+    }
+
     // Request interception lets us (a) record the redirect chain, (b) enforce
     // SSRF on every navigation hop, and (c) actually abort runaway redirects.
     await page.setRequestInterception(true);
     page.on("request", async (req) => {
       try {
         const url = req.url();
+
+        // Credential trap: if the canary submission is going out, capture WHERE it
+        // would land and abort it so the (fake) password never actually leaves.
+        if (trapArmed && !credentialTrapResult) {
+          const hit = matchCanaryHit(req, canary.token, trapFinalHost);
+          if (hit) {
+            credentialTrapResult = hit;
+            return await req.abort("blockedbyclient");
+          }
+        }
+
         const isNav =
           req.isNavigationRequest() && req.frame() === page.mainFrame();
 
@@ -296,6 +348,37 @@ export async function detonate(targetUrl) {
       screenshot = null;
     }
 
+    if (recordReplay) {
+      await client.send("Page.stopScreencast").catch(() => {});
+    }
+
+    // Credential trap runs LAST so it can't perturb the report above. Only bother
+    // if there's a password field to fill. We fill canary creds, submit, and wait
+    // briefly for the request handler to catch (and abort) the outbound submission.
+    let credentialTrap = null;
+    if (credentialTrapEnabled && signals.passwordFields > 0) {
+      trapFinalHost = signals.finalHost || "";
+      trapArmed = true;
+      const attempted = await fillCredentialForm(page, canary);
+      if (attempted) {
+        const deadline = Date.now() + CREDENTIAL_TRAP_WAIT_MS;
+        while (!credentialTrapResult && Date.now() < deadline) {
+          await new Promise((r) => setTimeout(r, 100));
+        }
+      }
+      trapArmed = false;
+      credentialTrap = credentialTrapResult
+        ? {
+            attempted: true,
+            blocked: true,
+            target: credentialTrapResult.url,
+            host: credentialTrapResult.host,
+            method: credentialTrapResult.method,
+            crossDomain: credentialTrapResult.crossDomain,
+          }
+        : { attempted, blocked: false, target: null, host: null, crossDomain: false };
+    }
+
     return {
       requestedUrl: targetUrl,
       finalUrl,
@@ -309,6 +392,8 @@ export async function detonate(targetUrl) {
       blockedRequests: blocked,
       signals,
       screenshotBase64: screenshot,
+      replayFrames,
+      credentialTrap,
       detonatedAt: new Date().toISOString(),
     };
   } finally {

@@ -65,6 +65,25 @@
             <button id="scan" class="btn btn-ghost" type="button">Scan QR</button>
           </div>
 
+          <div class="options">
+            <span class="field-label">Options</span>
+            <label class="switch switch-sm">
+              <input type="checkbox" id="replaySwitch" checked>
+              <span class="slider round"></span>
+              <span class="switch-label">Record replay video</span>
+            </label>
+            <label class="switch switch-sm">
+              <input type="checkbox" id="trapSwitch">
+              <span class="slider round"></span>
+              <span class="switch-label">Password trap (canary)</span>
+            </label>
+            <label class="switch switch-sm">
+              <input type="checkbox" id="liveSwitch">
+              <span class="slider round"></span>
+              <span class="switch-label">Live explore</span>
+            </label>
+          </div>
+
           <div id="qr-reader"></div>
 
           <p class="hint">
@@ -124,8 +143,22 @@
           </div>
 
           <img class="shot hidden" id="shot" alt="Screenshot of the detonated page" />
+          <canvas class="live-canvas hidden" id="live-canvas" tabindex="0"
+                  aria-label="Live interactive sandbox view"></canvas>
           <div class="glass hidden" id="glass"></div>
           <div class="stamp hidden" id="stamp"></div>
+        </div>
+
+        <div class="chamber-tools hidden" id="chamber-tools">
+          <div class="replay-controls hidden" id="replay-controls">
+            <button class="btn btn-ghost btn-sm" id="replay-play" type="button">▶ Replay</button>
+            <input type="range" id="replay-scrub" class="replay-scrub" min="0" max="0" value="0"
+                   aria-label="Scrub replay" />
+            <span class="mono" id="replay-time">0 / 0</span>
+          </div>
+          <button class="btn btn-ghost btn-sm hidden" id="live-start" type="button">Explore live ▶</button>
+          <button class="btn btn-ghost btn-sm hidden" id="live-stop" type="button">Stop live ■</button>
+          <span class="mono live-note" id="live-note"></span>
         </div>
 
         <div class="error-box hidden" id="error"></div>
@@ -151,6 +184,10 @@
             <div class="meta">
               <div class="k">Phishing check</div>
               <div class="v" id="m-phishing">—</div>
+            </div>
+            <div class="meta">
+              <div class="k">Password trap</div>
+              <div class="v" id="m-trap">—</div>
             </div>
           </div>
 

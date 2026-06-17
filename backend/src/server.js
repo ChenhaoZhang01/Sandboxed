@@ -8,6 +8,7 @@ import { runWithTimeout } from "./timeouts.js";
 import { scanBuffer } from "./pdfScan.js";
 import { checkForPhishing } from "../tools/phishing-detect.js";
 import { closeSearchBrowser } from "../tools/brand-search.js";
+import { attachLiveServer, closeLiveSessions } from "./live.js";
 import { readFile, writeFile } from 'fs/promises';
 import path from "path";
 import { fileURLToPath } from "url";
@@ -28,6 +29,10 @@ function resolveAnalysisLayers(input = {}) {
     // Cautious default: an auto-download still flags even a trusted domain.
     // Send false to trust downloads from allowlisted/verified hosts.
     downloadsAsHardDanger: input.downloadsAsHardDanger !== false,
+    // Record a screencast timeline of the detonation (default on).
+    recordReplay: input.recordReplay !== false,
+    // Auto-fill canary creds + trap the credential POST (opt-in: it submits forms).
+    credentialTrap: input.credentialTrap === true,
   };
 }
 
@@ -54,7 +59,10 @@ app.post("/detonate", async (req, res) => {
 
   const started = Date.now();
   try {
-    const report = await detonate(url);
+    const report = await detonate(url, {
+      recordReplay: analysisLayers.recordReplay,
+      credentialTrap: analysisLayers.credentialTrap,
+    });
 
     // Risk scoring (core) and brand-detection (enrichment) both derive only from
     // `report`, so run them CONCURRENTLY instead of back-to-back to cut latency.
@@ -92,6 +100,8 @@ app.post("/detonate", async (req, res) => {
       downloads: report.downloads,
       blockedRequests: report.blockedRequests,
       screenshotBase64: report.screenshotBase64,
+      replayFrames: report.replayFrames,
+      credentialTrap: report.credentialTrap,
       elapsedMs: Date.now() - started,
       phishing,
     });
@@ -214,12 +224,16 @@ const server = app.listen(PORT, () => {
   console.log(`Sandboxed detonation engine listening on http://localhost:${PORT}`);
   console.log(`  POST /detonate { "url": "..." }`);
   console.log(`  POST /scan-pdf  (raw PDF bytes, Content-Type: application/pdf)`);
+  console.log(`  WS   /live?url=...  (live interactive sandbox)`);
 });
+
+// Live interactive sandbox shares the same HTTP server (WebSocket upgrade on /live).
+attachLiveServer(server);
 
 async function shutdown() {
   console.log("\nShutting down...");
   server.close();
-  await Promise.all([closeBrowser(), closeSearchBrowser()]);
+  await Promise.all([closeLiveSessions(), closeBrowser(), closeSearchBrowser()]);
   process.exit(0);
 }
 process.on("SIGINT", shutdown);
