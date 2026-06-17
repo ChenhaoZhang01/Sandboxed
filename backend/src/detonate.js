@@ -26,20 +26,22 @@ let browserPromise = null;
  */
 export async function getBrowser() {
   if (!browserPromise) {
-    browserPromise = puppeteer.launch({
-      headless: true,
-      args: [
-        "--no-sandbox",
-        "--disable-setuid-sandbox",
-        "--disable-dev-shm-usage",
-        "--disable-gpu",
-        // Railway's container runtime blocks the syscalls Chrome's zygote uses to
-        // drop capabilities, so it crashes at sandbox/credentials.cc even with
-        // --no-sandbox. Disabling the zygote + single-process avoids that path.
-        "--no-zygote",
-        "--single-process",
-      ],
-    });
+    const args = [
+      "--no-sandbox",
+      "--disable-setuid-sandbox",
+      "--disable-dev-shm-usage",
+      "--disable-gpu",
+    ];
+    // Some restricted container runtimes (e.g. Railway) block the syscalls
+    // Chrome's zygote uses to drop capabilities, so it crashes at
+    // sandbox/credentials.cc even with --no-sandbox. On those hosts set
+    // CHROME_SINGLE_PROCESS=1 to disable the zygote + run single-process. Leave
+    // it UNSET where the sandbox works (Fly.io, Cloud Run, local) — single-process
+    // Chrome is less stable on heavy pages, so we only opt in where required.
+    if (process.env.CHROME_SINGLE_PROCESS === "1") {
+      args.push("--no-zygote", "--single-process");
+    }
+    browserPromise = puppeteer.launch({ headless: true, args });
   }
   return browserPromise;
 }

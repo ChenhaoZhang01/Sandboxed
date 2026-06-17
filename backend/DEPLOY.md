@@ -17,9 +17,13 @@ detonations don't time out. It builds from the same Dockerfile via `railway.json
 2. https://railway.app → **New Project → Deploy from GitHub repo** → pick this repo.
 3. Open the service → **Settings → Source → Root Directory = `backend`**.
    (Railway then reads `backend/railway.json` + `backend/Dockerfile`.)
-4. **Settings → Networking → Generate Domain** to get a public URL like
+4. **REQUIRED — Variables tab → add `CHROME_SINGLE_PROCESS` = `1`.** Railway's
+   container runtime blocks the syscalls Chrome's zygote uses, so without this the
+   detonation crashes at `sandbox/credentials.cc` even though `/health` works. This
+   flag makes Chrome run single-process to avoid that path.
+5. **Settings → Networking → Generate Domain** to get a public URL like
    `https://sandboxed-backend-production.up.railway.app`.
-5. First build pulls the Puppeteer image + `npm ci` (a few minutes). Railway injects
+6. First build pulls the Puppeteer image + `npm ci` (a few minutes). Railway injects
    `PORT` automatically; `src/server.js` already reads it.
 
 ## After it's live
@@ -27,6 +31,20 @@ detonations don't time out. It builds from the same Dockerfile via `railway.json
   a detonate (see curl below).
 - Point the clients at the Railway domain: extension Options → API base, and the PWA's
   API field / the `DEFAULT_API` in `frontend/app.js`.
+
+---
+
+# Fly.io (backup — most stable Chrome)
+
+Use this if Railway's `--single-process` Chrome proves flaky on heavy pages. Fly runs
+Firecracker microVMs with a real kernel, so Chrome's sandbox works and it runs full
+multi-process — **do NOT set `CHROME_SINGLE_PROCESS` here.** Config is `backend/fly.toml`.
+
+1. Install the CLI: `iwr https://fly.io/install.ps1 -useb | iex` (Windows) and `fly auth login`.
+2. From the `backend/` folder: `fly launch --no-deploy` (creates the app from `fly.toml`;
+   pick a unique app name if `sandboxed-backend` is taken).
+3. `fly deploy` — builds the Dockerfile and ships it. You get `https://<app>.fly.dev`.
+4. Test `/health` then a `/detonate` curl, and point the clients at the `.fly.dev` URL.
 
 ---
 

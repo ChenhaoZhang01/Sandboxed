@@ -1,0 +1,41 @@
+# Fly.io config for the Sandboxed detonation backend — backup host for when
+# Railway's --single-process workaround proves flaky. Fly runs Firecracker
+# microVMs with a real kernel, so Chrome's sandbox works and we do NOT set
+# CHROME_SINGLE_PROCESS here (multi-process Chrome = more stable on heavy pages).
+#
+# Deploy from the backend/ folder:
+#   fly launch --no-deploy   # first time: creates/links the app from this file
+#   fly deploy               # build the Dockerfile + ship it
+#
+# Rename `app` if "sandboxed-backend" is taken (Fly app names are global).
+app = "sandboxed-backend"
+primary_region = "sjc"
+
+[build]
+  dockerfile = "Dockerfile"
+
+[env]
+  # server.js reads process.env.PORT; pin it to the port the proxy routes to.
+  PORT = "8787"
+  NODE_ENV = "production"
+
+[http_service]
+  internal_port = 8787
+  force_https = true
+  # Keep one machine warm so there's no cold start during the demo. Set
+  # min_machines_running = 0 to scale to zero and save money when idle.
+  auto_stop_machines = "suspend"
+  auto_start_machines = true
+  min_machines_running = 1
+
+  [[http_service.checks]]
+    method = "get"
+    path = "/health"
+    interval = "30s"
+    timeout = "5s"
+    grace_period = "20s"
+
+[[vm]]
+  # Chromium needs headroom; 1 GB avoids OOM on heavy pages.
+  size = "shared-cpu-1x"
+  memory = "1gb"
