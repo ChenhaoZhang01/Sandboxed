@@ -379,6 +379,82 @@ body.popup { width: 400px; }
   text-align: center;
 }
 
+.toggle-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.switch-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+
+  background: var(--bg-2);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: 10px 12px;
+}
+
+.switch-label {
+  font-size: 13px;
+  color: var(--ink-dim);
+  line-height: 1.4;
+  max-width: 75%;
+}
+
+/* switch wrapper */
+.switch {
+  position: relative;
+  display: inline-block;
+  width: 44px;
+  height: 24px;
+}
+
+/* hide checkbox */
+.switch input {
+  opacity: 0;
+  width: 0;
+  height: 0;
+}
+
+/* track */
+.slider {
+  position: absolute;
+  cursor: pointer;
+  inset: 0;
+  background-color: var(--line-bright);
+  transition: 0.25s;
+  border-radius: 999px;
+}
+
+/* knob */
+.slider:before {
+  position: absolute;
+  content: "";
+  height: 18px;
+  width: 18px;
+  left: 3px;
+  top: 3px;
+  background-color: white;
+  transition: 0.25s;
+  border-radius: 50%;
+}
+
+/* checked state */
+.switch input:checked + .slider {
+  background-color: var(--cyan);
+}
+
+.switch input:checked + .slider:before {
+  transform: translateX(20px);
+}
+
+/* hover effect */
+.switch:hover .slider {
+  filter: brightness(1.1);
+}
+
 @keyframes slam {
   0% { transform: scale(1.5) rotate(-8deg); opacity: 0; }
   60% { opacity: 1; }
