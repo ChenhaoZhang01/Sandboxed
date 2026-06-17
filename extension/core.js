@@ -32,7 +32,7 @@ const SBX = (() => {
   // --- backend call with timeout + friendly errors ---
   async function detonate(url, opts = {}) {
     const base = await getApiBase();
-    const timeoutMs = opts.timeoutMs ?? 25000;
+    const timeoutMs = opts.timeoutMs ?? 45000;
     const controller = new AbortController();
     const t = setTimeout(() => controller.abort(), timeoutMs);
 

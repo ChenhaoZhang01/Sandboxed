@@ -15,7 +15,7 @@ if (process.env.CHROME_SINGLE_PROCESS === "1") {
   SEARCH_LAUNCH_ARGS.push("--no-zygote", "--single-process");
 }
 
-const SEARCH_TIMEOUT_MS = Number(process.env.BRAND_SEARCH_TIMEOUT_MS || 10000);
+const SEARCH_TIMEOUT_MS = Number(process.env.BRAND_SEARCH_TIMEOUT_MS || 5000);
 
 export async function findRealSiteViaBrowser(query) {
   // Enrichment only — never let a failed/slow search hang or crash a detonation.

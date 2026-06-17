@@ -1,7 +1,7 @@
 import puppeteer from "puppeteer";
 import { isBlockedUrl, isBlockedLiteral } from "./ssrf.js";
 
-const DETONATE_TIMEOUT_MS = Number(process.env.DETONATE_TIMEOUT_MS || 15000);
+const DETONATE_TIMEOUT_MS = Number(process.env.DETONATE_TIMEOUT_MS || 30000);
 const MAX_REDIRECTS = Number(process.env.MAX_REDIRECTS || 15);
 
 // A realistic UA so phishing kits behave normally (many cloak against headless).
@@ -127,7 +127,7 @@ export async function detonate(targetUrl) {
     let response = null;
     try {
       response = await page.goto(targetUrl, {
-        waitUntil: "networkidle2",
+        waitUntil: "domcontentloaded",
         timeout: DETONATE_TIMEOUT_MS,
       });
     } catch (navErr) {

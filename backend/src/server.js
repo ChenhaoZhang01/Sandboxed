@@ -4,12 +4,14 @@ import cors from "cors";
 import { detonate, closeBrowser } from "./detonate.js";
 import { scoreRisk } from "./risk.js";
 import { isBlockedUrl } from "./ssrf.js";
+import { runWithTimeout } from "./timeouts.js";
 import { scanBuffer } from "./pdfScan.js";
 import { checkForPhishing } from "../tools/phishing-detect.js";
 
 
 const app = express();
 const PORT = Number(process.env.PORT || 8787);
+const PHISHING_ENRICHMENT_TIMEOUT_MS = Number(process.env.PHISHING_ENRICHMENT_TIMEOUT_MS || 3500);
 
 app.use(cors());
 app.use(express.json({ limit: "256kb" }));
@@ -38,7 +40,11 @@ app.post("/detonate", async (req, res) => {
     // Clone-detection is enrichment — a failure here must not fail the detonation.
     let phishing = null;
     try {
-      phishing = await checkForPhishing(report);
+      phishing = await runWithTimeout(
+        checkForPhishing(report),
+        PHISHING_ENRICHMENT_TIMEOUT_MS,
+        null
+      );
     } catch (err) {
       console.error("phishing check failed (non-fatal):", err.message || err);
     }
