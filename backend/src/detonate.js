@@ -1,8 +1,9 @@
 import puppeteer from "puppeteer";
 import { isBlockedUrl, isBlockedLiteral } from "./ssrf.js";
 
-const DETONATE_TIMEOUT_MS = Number(process.env.DETONATE_TIMEOUT_MS || 15000);
+const DETONATE_TIMEOUT_MS = Number(process.env.DETONATE_TIMEOUT_MS || 30000);
 const MAX_REDIRECTS = Number(process.env.MAX_REDIRECTS || 15);
+const SCREENSHOT_DELAY_MS = Number(process.env.SCREENSHOT_DELAY_MS || 1500);
 
 // A realistic UA so phishing kits behave normally (many cloak against headless).
 const USER_AGENT =
@@ -127,7 +128,7 @@ export async function detonate(targetUrl) {
     let response = null;
     try {
       response = await page.goto(targetUrl, {
-        waitUntil: "networkidle2",
+        waitUntil: "domcontentloaded",
         timeout: DETONATE_TIMEOUT_MS,
       });
     } catch (navErr) {
@@ -138,10 +139,15 @@ export async function detonate(targetUrl) {
 
     const finalUrl = page.url();
 
-    const pageMeta = await extractPageData(page)
+    const pageMeta = await extractPageData(page);
 
     const signals = await extractSignals(page, finalUrl);
 
+    // Give heavy / animated pages a brief moment to settle before capturing
+    // the final screenshot (helps with loading-overlay pages like x.com).
+    if (SCREENSHOT_DELAY_MS > 0) {
+      await new Promise((resolve) => setTimeout(resolve, SCREENSHOT_DELAY_MS));
+    }
 
     let screenshot = null;
     try {

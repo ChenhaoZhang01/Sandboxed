@@ -4,9 +4,10 @@ import cors from "cors";
 import { detonate, closeBrowser } from "./detonate.js";
 import { scoreRisk } from "./risk.js";
 import { isBlockedUrl } from "./ssrf.js";
+import { runWithTimeout } from "./timeouts.js";
 import { scanBuffer } from "./pdfScan.js";
 import { checkForPhishing } from "../tools/phishing-detect.js";
-import { readFile } from 'fs/promises';
+import { readFile, writeFile } from 'fs/promises';
 import path from "path";
 import { fileURLToPath } from "url";
 
@@ -16,6 +17,7 @@ const __dirname = path.dirname(__filename);
 
 const app = express();
 const PORT = Number(process.env.PORT || 8787);
+const PHISHING_ENRICHMENT_TIMEOUT_MS = Number(process.env.PHISHING_ENRICHMENT_TIMEOUT_MS || 3500);
 
 app.use(cors());
 app.use(express.json({ limit: "256kb" }));
@@ -44,7 +46,11 @@ app.post("/detonate", async (req, res) => {
     // Clone-detection is enrichment — a failure here must not fail the detonation.
     let phishing = null;
     try {
-      phishing = await checkForPhishing(report);
+      phishing = await runWithTimeout(
+        checkForPhishing(report),
+        PHISHING_ENRICHMENT_TIMEOUT_MS,
+        null
+      );
     } catch (err) {
       console.error("phishing check failed (non-fatal):", err.message || err);
     }
@@ -85,6 +91,23 @@ app.get("/verified-links", async (_req, res) => {
   }
 });
 
+app.post("/verified-links/add", async (req, res) => {
+  try {
+    const { url, data } = req.body;
+
+    if (!url) {
+      return res.status(400).json({ error: "Missing url" });
+    }
+
+    const result = await addVerifiedLink(url, data || null);
+
+    res.json({ ok: true, added: result });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "Failed to add verified link" });
+  }
+});
+
 const PDF_SCAN_LIMIT = `${Number(process.env.PDF_SCAN_MAX_MB || 20)}mb`;
 
 /**
@@ -121,8 +144,33 @@ async function getVerifiedLinks() {
     return JSON.parse(rawData);
   } catch (error) {
     console.error("Error reading file:", error);
-    return [];
+    return {};
   }
+}
+
+async function addVerifiedLink(url, data) {
+  const filePath = path.join(__dirname, "../verifiedLinks.json");
+
+  let existing = [];
+
+  try {
+    const raw = await readFile(filePath, "utf8");
+    existing = JSON.parse(raw);
+  } catch {
+    existing = [];
+  }
+
+  const entry = {
+    url,
+    data,
+    timestamp: Date.now(),
+  };
+
+  existing.push(entry);
+
+  await writeFile(filePath, JSON.stringify(existing, null, 2), "utf8");
+
+  return entry;
 }
 
 async function resolveTarget(input) {

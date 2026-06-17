@@ -37,10 +37,10 @@ storage except to be applied locally in the extension.
 ## The analysis backend
 
 The link you submit is processed by the backend at the API base you configure.
-By default this is a local server you run yourself (`http://localhost:8787`), so
-no data leaves your machine. If you point the extension at a hosted backend, the
-submitted URL is processed there per that server's own policy. The backend does
-not require any account, login, or personal information.
+By default this uses the hosted backend at `https://sandboxed.fly.dev`, so the
+extension is ready to use out of the box. If you point the extension at your own
+backend, the submitted URL is processed there per that server's own policy. The
+backend does not require any account, login, or personal information.
 
 ## Permissions and why they are needed
 
