@@ -1,5 +1,5 @@
 const $ = (id) => document.getElementById(id);
-const DEFAULT_API = "https://sandboxed-backend-production.up.railway.app";
+const DEFAULT_API = "https://sandboxed.fly.dev";
 
 // --- API base, persisted ---
 const apiInput = $("api");
