@@ -1,0 +1,26 @@
+{
+  "name": "Sandboxer — URL Detonation",
+  "short_name": "Sandboxer",
+  "description": "Scan or paste a suspicious link and detonate it in a sandbox before it touches your phone.",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "portrait-primary",
+  "background_color": "#0E1217",
+  "theme_color": "#0E1217",
+  "categories": ["security", "utilities"],
+  "icons": [
+    {
+      "src": "icons/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "icons/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ]
+}

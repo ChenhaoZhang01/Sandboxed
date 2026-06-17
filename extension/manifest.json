@@ -1,0 +1,26 @@
+{
+  "manifest_version": 3,
+  "name": "Sandboxer — Link Detonator",
+  "version": "0.1.0",
+  "description": "Right-click any link to detonate it in a sandbox and see a risk verdict before you ever visit it.",
+  "permissions": ["contextMenus", "storage", "tabs"],
+  "host_permissions": ["<all_urls>"],
+  "background": {
+    "service_worker": "background.js"
+  },
+  "action": {
+    "default_popup": "popup.html",
+    "default_title": "Sandboxer — detonate a link",
+    "default_icon": {
+      "16": "icons/favicon-32.png",
+      "48": "icons/icon-192.png",
+      "128": "icons/icon-512.png"
+    }
+  },
+  "options_page": "options.html",
+  "icons": {
+    "16": "icons/favicon-32.png",
+    "48": "icons/icon-192.png",
+    "128": "icons/icon-512.png"
+  }
+}

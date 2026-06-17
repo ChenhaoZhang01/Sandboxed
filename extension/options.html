@@ -1,0 +1,35 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Sandboxer — settings</title>
+    <link rel="stylesheet" href="ui.css" />
+  </head>
+  <body class="popup">
+    <div class="sbx-head">
+      <span class="glyph" aria-hidden="true"></span>
+      <span class="name">Sandboxer Settings</span>
+    </div>
+    <div class="sbx-body">
+      <label class="opt-field" for="api">Detonation engine URL</label>
+      <input
+        id="api"
+        class="url-input"
+        placeholder="http://localhost:8787"
+        spellcheck="false"
+        autocomplete="off"
+      />
+      <div class="actions">
+        <button id="save" class="btn btn-primary">Save</button>
+        <span id="saved" class="opt-saved" hidden>Saved</span>
+      </div>
+      <p class="hint">
+        Point this at your running backend. Use <b>http://localhost:8787</b> for local
+        dev, or your tunnel/deploy URL (e.g. an ngrok <b>https</b> address) to use the
+        extension against a remote engine.
+      </p>
+    </div>
+    <script src="core.js"></script>
+    <script src="options.js"></script>
+  </body>
+</html>

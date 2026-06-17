@@ -1,0 +1,28 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-label="Sandboxer">
+  <defs>
+    <radialGradient id="bg" cx="50%" cy="36%" r="78%">
+      <stop offset="0%" stop-color="#17212C" />
+      <stop offset="100%" stop-color="#0B0F14" />
+    </radialGradient>
+    <radialGradient id="glow" cx="50%" cy="50%" r="50%">
+      <stop offset="0%" stop-color="#58D7E6" stop-opacity="0.40" />
+      <stop offset="70%" stop-color="#58D7E6" stop-opacity="0" />
+    </radialGradient>
+  </defs>
+
+  <!-- full-bleed background so it works as a maskable + apple icon -->
+  <rect width="512" height="512" fill="url(#bg)" />
+
+  <!-- ambient containment glow -->
+  <circle cx="256" cy="256" r="150" fill="url(#glow)" />
+
+  <!-- outer hazard / instrument ring -->
+  <circle cx="256" cy="256" r="176" fill="none" stroke="#2A9DAB"
+          stroke-width="6" stroke-dasharray="6 16" opacity="0.6" />
+
+  <!-- containment ring -->
+  <circle cx="256" cy="256" r="150" fill="none" stroke="#58D7E6" stroke-width="22" />
+
+  <!-- core -->
+  <circle cx="256" cy="256" r="46" fill="#58D7E6" />
+</svg>
