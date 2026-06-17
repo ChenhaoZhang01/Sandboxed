@@ -1,5 +1,5 @@
 const $ = (id) => document.getElementById(id);
-const DEFAULT_API = "http://localhost:8787";
+const DEFAULT_API = "https://sandboxed-backend.onrender.com";
 
 // --- API base, persisted ---
 const apiInput = $("api");
