@@ -23,11 +23,11 @@ const stamp = $("stamp");
 const errorBox = $("error");
 const readout = $("readout");
 
-// pdf scanning (rename later)
-const fs = require('fs')
-const { ClamScan } = require('pompelmi');
-const path = require('path');
- 
+// --- pdf scan elements ---
+const dropzone = $("dropzone");
+const fileInput = $("pdf-file-input");
+const browseBtn = $("pdf-browse-btn");
+const dropzoneStatus = $("dropzone-status");
 
 function setStatus(state, text) {
   status.dataset.state = state;
@@ -84,46 +84,81 @@ async function detonate(rawUrl) {
   }
 }
 
-// contains both static keyword analysis of malicious indicators(parsing for suspicious metadata tags)
-async function scanPDF(filepath) {
-  const clam = new ClamScan();
-  const file = path.resolve(filepath);
+// Static indicator scan: reads a PDF's raw bytes in-browser and checks for
+// keywords associated with active-content/auto-run PDF malware. This is a
+// heuristic only — real AV scanning happens server-side via /scan-pdf.
+async function scanPDF(file) {
+  const buffer = await file.arrayBuffer();
+  // latin1 is a byte-safe 1:1 decoding — never throws on binary PDF content,
+  // and the ASCII indicator keywords below still match correctly under it.
+  const pdfContent = new TextDecoder("latin1").decode(buffer);
 
-  let isSafe = true 
+  const indicators = ["/JS", "/JavaScript", "/OpenAction", "/AA", "/EmbeddedFile"];
+  const foundIndicators = indicators.filter((i) => pdfContent.includes(i));
 
-  const buffer = fs.readFileSync(filepath);
-  const pdfContent = buffer.toString('utf8');
+  return { foundIndicators };
+}
 
-  // -- CLAMSCAN --
+// POST the raw PDF bytes to the backend for a real ClamAV scan. Never throws —
+// network/backend failures resolve to a result object so the caller can still
+// show the local indicator result.
+async function scanPdfOnServer(file) {
   try {
-    const isClean = await clam.scanFile(file);
-  if (isClean) {
-    console.log('The PDF is safe.'); // debug 
-  } else {
-    console.log('Malware detected in PDF!');
-
-    isSafe = false
-
-    // deeper functions post detection
-    const { isInfected, file: scannedFile, viruses } = await clam.isInfected(file);
-
-    console.log(`Detected Malware/Viruses: ${viruses.join(', ')}`);
-  }
+    const res = await fetch(apiBase() + "/scan-pdf", {
+      method: "POST",
+      headers: { "Content-Type": "application/pdf" },
+      body: file,
+    });
+    const data = await res.json().catch(() => null);
+    if (!res.ok) {
+      return { status: "error", message: (data && data.error) || `Server returned ${res.status}` };
+    }
+    return data;
   } catch (err) {
-    console.error('ClamAV scan failed:', err);
+    return { status: "error", message: "Could not reach " + apiBase() + " (" + err.message + ")" };
+  }
+}
+
+async function handlePdfFile(file) {
+  if (!file) return;
+  if (file.type !== "application/pdf" && !file.name.toLowerCase().endsWith(".pdf")) {
+    alert("Please drop or select a PDF file.");
+    return;
   }
 
-  // -- INDICATORS --
-  // Suspicious PDF structures and keys
-  const indicators = ['/JS', '/JavaScript', '/OpenAction', '/AA', '/EmbeddedFile'];
-  const foundIndicators = indicators.filter(indicator => pdfContent.includes(indicator));
+  dropzoneStatus.textContent = "Scanning…";
+  dropzone.classList.add("scanning");
 
-  if (foundIndicators.length > 0) {
-    isSafe = false
-    console.log('Suspicious elements found:', foundIndicators);
+  try {
+    const [local, server] = await Promise.all([scanPDF(file), scanPdfOnServer(file)]);
+    alert(buildScanMessage(file.name, local, server));
+  } finally {
+    dropzone.classList.remove("scanning");
+    dropzoneStatus.textContent = "Drop a PDF here or click to browse";
+    fileInput.value = "";
+  }
+}
+
+function buildScanMessage(filename, local, server) {
+  const lines = [`PDF scan: ${filename}`, ""];
+
+  lines.push(
+    local.foundIndicators.length > 0
+      ? `Suspicious indicators found: ${local.foundIndicators.join(", ")}`
+      : "No suspicious indicators found (client-side check)."
+  );
+
+  if (server.status === "infected") {
+    lines.push(`ClamAV: INFECTED — ${(server.viruses || []).join(", ") || "unknown signature"}`);
+  } else if (server.status === "clean") {
+    lines.push("ClamAV: clean.");
+  } else if (server.status === "unavailable") {
+    lines.push("ClamAV: scanner unavailable on server.");
+  } else {
+    lines.push(`ClamAV: could not complete scan (${server.message || "unknown error"}).`);
   }
 
-  return isSafe
+  return lines.join("\n");
 }
 
 function showError(msg) {
@@ -285,6 +320,34 @@ $("scan").addEventListener("click", async () => {
     showError("Couldn't open the camera: " + err.message);
     qr = null;
   }
+});
+
+// --- PDF dropzone ---
+browseBtn.addEventListener("click", () => fileInput.click());
+dropzone.addEventListener("click", (e) => {
+  if (e.target !== browseBtn) fileInput.click();
+});
+dropzone.addEventListener("keydown", (e) => {
+  if ((e.key === "Enter" || e.key === " ") && e.target === dropzone) {
+    e.preventDefault();
+    fileInput.click();
+  }
+});
+fileInput.addEventListener("change", () => handlePdfFile(fileInput.files && fileInput.files[0]));
+
+["dragenter", "dragover"].forEach((evt) =>
+  dropzone.addEventListener(evt, (e) => {
+    e.preventDefault();
+    dropzone.classList.add("dragover");
+  })
+);
+["dragleave", "dragend"].forEach((evt) =>
+  dropzone.addEventListener(evt, () => dropzone.classList.remove("dragover"))
+);
+dropzone.addEventListener("drop", (e) => {
+  e.preventDefault();
+  dropzone.classList.remove("dragover");
+  handlePdfFile(e.dataTransfer.files && e.dataTransfer.files[0]);
 });
 
 // --- PWA: register the service worker (offline app shell + installable) ---
