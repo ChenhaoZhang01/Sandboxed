@@ -72,6 +72,24 @@
               <span class="chip" data-url="http://x.com">x.com</span>
             </div>
           </div>
+
+          <div class="dropzone-section">
+            <span class="field-label">Scan a PDF</span>
+            <div class="dropzone" id="dropzone" tabindex="0" role="button" aria-label="Drop a PDF here or click to browse for a file">
+              <div class="ring"></div>
+              <p>
+                Drop a PDF here or
+                <button type="button" id="pdf-browse-btn" class="dropzone-browse">browse</button>
+              </p>
+              <p class="dropzone-status mono" id="dropzone-status">Drop a PDF here or click to browse</p>
+              <input type="file" id="pdf-file-input" accept="application/pdf,.pdf" hidden />
+            </div>
+            <p class="hint">
+              Runs a quick static indicator check in your browser, then a real
+              ClamAV scan on the server. Nothing is uploaded except the PDF you choose.
+            </p>
+            <div class="scan-result hidden" id="scan-result"></div>
+          </div>
         </div>
       </section>
 
