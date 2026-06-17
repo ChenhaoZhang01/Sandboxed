@@ -179,6 +179,7 @@ function showError(msg) {
 }
 
 function render(d) {
+  console.log("render: ", d)
   setStatus("armed", "Contained");
   consoleState.textContent = "Done";
 
@@ -198,7 +199,6 @@ function render(d) {
     (d.score ?? 0) +
     "</span>";
   stamp.classList.remove("hidden");
-  // re-trigger slam animation
   void stamp.offsetWidth;
   stamp.classList.add("stamp-in");
 
@@ -209,10 +209,35 @@ function render(d) {
     (d.redirectCount ?? 0) + (d.redirectCount === 1 ? " hop" : " hops");
   $("m-title").textContent = d.title || "—";
 
+  // phishing
+  renderPhishing(d.phishing);
+
   renderTrajectory(d.redirectChain || []);
   renderReasons(d.reasons || []);
 
   readout.classList.remove("hidden");
+}
+
+function renderPhishing(p) {
+  const el = $("m-phishing");
+  if (!el) return;
+
+  if (!p) {
+    el.textContent = "—";
+    el.className = "v";
+    return;
+  }
+
+  if (p.phishing) {
+    el.innerHTML =
+      "⚠️ Spoofing <strong>" + escapeHtml(p.spoofedBrand) + "</strong>" +
+      " — real site: <a href=\"" + escapeHtml(p.expectedUrl) + "\" target=\"_blank\" rel=\"noopener\">" +
+      escapeHtml(p.expectedUrl) + "</a>";
+    el.className = "v phishing-warn";
+  } else {
+    el.textContent = "✓ No spoof detected";
+    el.className = "v phishing-ok";
+  }
 }
 
 function renderTrajectory(chain) {

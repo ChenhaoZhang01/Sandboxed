@@ -5,6 +5,8 @@ import { detonate, closeBrowser } from "./detonate.js";
 import { scoreRisk } from "./risk.js";
 import { isBlockedUrl } from "./ssrf.js";
 import { scanBuffer } from "./pdfScan.js";
+import { checkForPhishing } from "../tools/phishing-detect.js";
+
 
 const app = express();
 const PORT = Number(process.env.PORT || 8787);
@@ -33,6 +35,8 @@ app.post("/detonate", async (req, res) => {
   try {
     const report = await detonate(url);
     const risk = await scoreRisk(report);
+    const phishing = await checkForPhishing(report)
+    console.log("phshing check!! ", phishing)
 
     res.json({
       verdict: risk.verdict,
@@ -44,12 +48,15 @@ app.post("/detonate", async (req, res) => {
       redirectChain: report.redirectChain,
       redirectCount: report.redirectCount,
       title: report.title,
+      favicon: report.favicon,
+      h1s: report.h1s,
       signals: report.signals,
       intel: risk.intel,
       downloads: report.downloads,
       blockedRequests: report.blockedRequests,
       screenshotBase64: report.screenshotBase64,
       elapsedMs: Date.now() - started,
+      phishing,
     });
   } catch (err) {
     console.error("detonation failed:", err);
