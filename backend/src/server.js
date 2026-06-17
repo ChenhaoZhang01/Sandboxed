@@ -25,6 +25,9 @@ function resolveAnalysisLayers(input = {}) {
     domainAge: input.domainAge !== false,
     safeBrowsing: input.safeBrowsing !== false,
     phishingEnrichment: input.phishingEnrichment === true,
+    // Cautious default: an auto-download still flags even a trusted domain.
+    // Send false to trust downloads from allowlisted/verified hosts.
+    downloadsAsHardDanger: input.downloadsAsHardDanger !== false,
   };
 }
 
