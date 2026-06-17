@@ -8,9 +8,9 @@ services:
     runtime: docker
     plan: free            # 512 MB RAM / 0.1 CPU. See note in backend/DEPLOY.md if Chromium OOMs.
     region: oregon
-    rootDir: backend       # build + Dockerfile paths are relative to this
-    dockerfilePath: ./Dockerfile
-    dockerContext: .
+    rootDir: backend                    # scopes auto-deploy to changes under /backend
+    dockerfilePath: ./backend/Dockerfile  # Render resolves these relative to the REPO ROOT,
+    dockerContext: ./backend              # not to rootDir — so they keep the backend/ prefix
     healthCheckPath: /health
     autoDeploy: true       # redeploy on every push to the connected branch
     envVars:
