@@ -8,11 +8,15 @@ const THRESHOLDS = { suspicious: 25, dangerous: 60 };
 
 /**
  * Turn a raw detonation report into a risk verdict.
- * Enriches with domain age (RDAP) + Safe Browsing (if key present).
+ * Enriches with domain age (RDAP) + Safe Browsing unless the user disables
+ * those optional layers.
  */
-export async function scoreRisk(report) {
+export async function scoreRisk(report, options = {}) {
   const reasons = [];
   let score = 0;
+  const analysisLayers = options.analysisLayers || {};
+  const includeDomainAge = analysisLayers.domainAge !== false;
+  const includeSafeBrowsing = analysisLayers.safeBrowsing !== false;
 
   const add = (points, reason) => {
     score += points;
@@ -28,11 +32,13 @@ export async function scoreRisk(report) {
 
   // --- Threat intelligence ---
   const [domainAge, safeBrowsing] = await Promise.all([
-    getDomainAge(host),
-    checkSafeBrowsing(report.finalUrl || report.requestedUrl),
+    includeDomainAge ? getDomainAge(host) : Promise.resolve({ skipped: true }),
+    includeSafeBrowsing
+      ? checkSafeBrowsing(report.finalUrl || report.requestedUrl)
+      : Promise.resolve({ skipped: true }),
   ]);
 
-  if (safeBrowsing.listed) {
+  if (!safeBrowsing.skipped && safeBrowsing.listed) {
     add(60, `Google Safe Browsing flagged this URL: ${safeBrowsing.threats.join(", ")}`);
   }
 

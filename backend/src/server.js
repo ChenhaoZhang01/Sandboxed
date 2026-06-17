@@ -19,6 +19,14 @@ const app = express();
 const PORT = Number(process.env.PORT || 8787);
 const PHISHING_ENRICHMENT_TIMEOUT_MS = Number(process.env.PHISHING_ENRICHMENT_TIMEOUT_MS || 10000);
 
+function resolveAnalysisLayers(input = {}) {
+  return {
+    domainAge: input.domainAge !== false,
+    safeBrowsing: input.safeBrowsing !== false,
+    phishingEnrichment: input.phishingEnrichment === true,
+  };
+}
+
 app.use(cors());
 app.use(express.json({ limit: "256kb" }));
 
@@ -32,6 +40,7 @@ app.get("/health", (_req, res) => res.json({ ok: true, service: "sandboxed" }));
 app.post("/detonate", async (req, res) => {
   const raw = (req.body && req.body.url ? String(req.body.url) : "").trim();
   const url = await resolveTarget(raw);
+  const analysisLayers = resolveAnalysisLayers(req.body?.analysisLayers);
 
   if (!url) {
     return res
@@ -42,19 +51,21 @@ app.post("/detonate", async (req, res) => {
   const started = Date.now();
   try {
     const report = await detonate(url);
-    const risk = await scoreRisk(report);
-    // Clone-detection is enrichment — a failure here must not fail the detonation.
+    const risk = await scoreRisk(report, { analysisLayers });
+    // Brand-detection is enrichment — a failure here must not fail the detonation.
     let phishing = null;
-    try {
-      phishing = await runWithTimeout(
-        checkForPhishing(report),
-        PHISHING_ENRICHMENT_TIMEOUT_MS,
-        null
-      );
-    } catch (err) {
-      console.error("phishing check failed (non-fatal):", err.message || err);
+    if (analysisLayers.phishingEnrichment) {
+      try {
+        phishing = await runWithTimeout(
+          checkForPhishing(report),
+          PHISHING_ENRICHMENT_TIMEOUT_MS,
+          null
+        );
+      } catch (err) {
+        console.error("phishing check failed (non-fatal):", err.message || err);
+      }
     }
-    console.log("phshing check!! ", phishing)
+    console.log("phishing check!! ", phishing);
 
     res.json({
       verdict: risk.verdict,

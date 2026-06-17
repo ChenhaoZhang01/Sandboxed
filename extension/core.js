@@ -9,15 +9,29 @@ const SBX = (() => {
     // How links get checked: "manual" (right-click only),
     // "click" (intercept clicks), or "both".
     checkMode: "manual",
+    analysisLayers: {
+      domainAge: true,
+      safeBrowsing: true,
+      phishingEnrichment: false,
+    },
   };
 
   // --- settings (persist across browser restarts via chrome.storage.sync) ---
+  function normalizeAnalysisLayers(layers = {}) {
+    return {
+      domainAge: layers.domainAge !== false,
+      safeBrowsing: layers.safeBrowsing !== false,
+      phishingEnrichment: layers.phishingEnrichment === true,
+    };
+  }
+
   function getSettings() {
     return new Promise((resolve) =>
       chrome.storage.sync.get(DEFAULTS, (o) =>
         resolve({
           apiBase: (o.apiBase || DEFAULTS.apiBase).replace(/\/$/, ""),
           checkMode: o.checkMode || DEFAULTS.checkMode,
+          analysisLayers: normalizeAnalysisLayers(o.analysisLayers),
         })
       )
     );
@@ -30,7 +44,9 @@ const SBX = (() => {
   }
 
 async function detonate(url, opts = {}) {
-  const base = await getApiBase();
+  const settings = await getSettings();
+  const base = settings.apiBase;
+  const analysisLayers = normalizeAnalysisLayers(opts.analysisLayers || settings.analysisLayers);
   const timeoutMs = opts.timeoutMs ?? 25000;
 
   const controller = new AbortController();
@@ -72,7 +88,7 @@ async function detonate(url, opts = {}) {
     const res = await fetch(base + "/detonate", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ url }),
+      body: JSON.stringify({ url, analysisLayers }),
       signal: controller.signal,
     });
 

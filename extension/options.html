@@ -40,6 +40,26 @@
         </label>
       </div>
 
+      <label class="opt-field">Optional analysis layers</label>
+      <div class="modes">
+        <label class="mode-opt">
+          <input type="checkbox" id="layer-domain-age" />
+          <span><b>Domain age</b> — RDAP age lookup and age-based scoring</span>
+        </label>
+        <label class="mode-opt">
+          <input type="checkbox" id="layer-safe-browsing" />
+          <span><b>Safe Browsing</b> — Google reputation lookup when an API key is configured</span>
+        </label>
+        <label class="mode-opt">
+          <input type="checkbox" id="layer-phishing-enrichment" />
+          <span><b>Brand enrichment</b> — browser search and favicon matching for spoof detection</span>
+        </label>
+      </div>
+      <p class="hint">
+        These layers are optional. Turn them off for the fastest scans, or enable
+        them when you want deeper enrichment.
+      </p>
+
       <div class="actions">
         <button id="save" class="btn btn-primary">Save</button>
         <span id="saved" class="opt-saved" hidden>Saved</span>
