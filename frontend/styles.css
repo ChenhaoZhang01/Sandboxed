@@ -850,46 +850,35 @@ a {
 }
 
 .game-wrap {
-  height: calc(100vh - 75px);
-  padding: 2vh 4%;
-  overflow: hidden;
+  min-height: calc(100vh - 75px);
+  padding: 18px 16px 48px;
   display: flex;
   flex-direction: column;
   align-items: center;
 }
 
-.game-wrap h1 {
-  margin: 0 0 2vh;
-  font-size: clamp(1.4rem, 3vw, 2.1rem);
-}
-
 .game-box {
-  width: min(90%, 850px);
-  height: 78vh;
+  width: min(94%, 680px);
   background: linear-gradient(180deg, var(--panel) 0%, var(--panel-2) 100%);
   border: 1px solid var(--line);
-  border-radius: var(--radius);
+  border-radius: 10px;
   box-shadow: var(--shadow);
-  padding: 3%;
+  padding: clamp(16px, 3vw, 26px);
   margin: 0 auto;
-  text-align: center;
-  overflow: hidden;
   display: flex;
   flex-direction: column;
+  gap: 14px;
 }
 
 .progress-bar {
   width: 100%;
-  height: 2%;
-  min-height: 8px;
-  max-height: 12px;
+  height: 8px;
   background: var(--bg-2);
   border: 1px solid var(--line-bright);
   border-radius: 999px;
   overflow: hidden;
   display: flex;
 }
-
 #progress {
   height: 100%;
   width: 0%;
@@ -898,57 +887,409 @@ a {
   transition: width 0.3s;
 }
 
-.score-row {
-  height: 8%;
-  min-height: 36px;
+/* ---------- Spot-the-Phish trainer ---------- */
+.trainer-hud {
   display: flex;
-  justify-content: space-between;
   align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+.lives {
+  display: inline-flex;
+  gap: 4px;
+  font-size: 18px;
+}
+.lives .heart {
+  color: var(--danger);
+}
+.lives .heart.lost {
+  color: var(--line-bright);
+}
+.hud-tags {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+}
+.cat-chip {
+  font-size: 10px;
+  letter-spacing: 0.16em;
+  color: #06222a;
+  background: var(--cyan);
+  border-radius: 999px;
+  padding: 4px 9px;
+  font-weight: 600;
+}
+.diff {
+  display: inline-flex;
+  gap: 4px;
+}
+.diff .dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--line-bright);
+}
+.diff .dot.on {
+  background: var(--warn);
+  box-shadow: 0 0 6px var(--warn);
+}
+.hud-score {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 8px;
+}
+.score-mult {
+  color: var(--cyan);
+  font-size: 12px;
+  font-weight: 600;
+}
+.score-val {
+  color: var(--ink);
+  font-size: 20px;
+  font-weight: 600;
+}
+
+.timer-bar {
+  width: 100%;
+  height: 5px;
+  background: var(--bg-2);
+  border-radius: 999px;
+  overflow: hidden;
+}
+#timer-fill {
+  height: 100%;
+  width: 100%;
+  background: var(--cyan);
+  transition: width 0.1s linear;
+}
+#timer-fill.low {
+  background: var(--danger);
+}
+
+.trainer-prompt {
+  margin: 2px 0 0;
+  text-align: center;
   color: var(--ink-dim);
-  font-family: "IBM Plex Mono", monospace;
-  font-size: clamp(0.85rem, 1.5vw, 1.1rem);
+  font-size: 13px;
+  letter-spacing: 0.04em;
 }
 
-.score-row p {
-  margin: 0;
+.artifact-stage {
+  display: flex;
+  justify-content: center;
 }
 
-#phishingQuestion {
+/* artifact cards (email / sms / url / login / social) render light, like the
+   real thing, against the dark chrome */
+.art {
+  width: 100%;
+  text-align: left;
+  background: #fff;
+  color: #1a2330;
+  border-radius: 10px;
+  overflow: hidden;
+  border: 1px solid #d7dde6;
+  box-shadow: 0 10px 30px -16px rgba(0, 0, 0, 0.6);
+}
+.art-app {
+  font-size: 11px;
+  letter-spacing: 0.06em;
+  color: #6b7785;
+  text-transform: uppercase;
+}
+.art-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 14px;
+  border-bottom: 1px solid #e6ebf1;
+}
+.avatar {
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  flex: 0 0 auto;
+  background: #c9d3df;
+  color: #2a3543;
+  display: grid;
+  place-items: center;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+.art-id {
   flex: 1;
+  min-width: 0;
+}
+.from-name {
+  font-weight: 700;
+  font-size: 14px;
+}
+.from-addr {
+  font-size: 12px;
+  color: #6b7785;
+  word-break: break-all;
+}
+.art-head .art-app {
+  margin-left: auto;
+  white-space: nowrap;
+}
+.subject {
+  padding: 12px 14px 0;
+  font-weight: 700;
+  font-size: 15px;
+}
+.art-body {
+  padding: 10px 14px 16px;
+}
+.art-body p {
+  margin: 0 0 10px;
+  font-size: 14px;
+  line-height: 1.5;
+}
+.art-link {
+  display: inline-block;
+  margin-top: 4px;
+  background: #1a73e8;
+  color: #fff;
+  padding: 9px 14px;
+  border-radius: 6px;
+  text-decoration: none;
+  font-weight: 600;
+  font-size: 14px;
+}
+.link-reveal {
+  margin-top: 10px;
+  font-size: 12px;
+  color: #6b7785;
+  background: #f1f4f8;
+  border: 1px dashed #c4ccd6;
+  border-radius: 6px;
+  padding: 7px 10px;
+  word-break: break-all;
+}
+.link-reveal .url {
+  color: #b3261e;
+}
+
+/* sms + social message bubbles */
+.art-sms,
+.art-social {
+  padding: 12px 14px;
+}
+.sms-sender {
+  font-size: 12px;
+  color: #6b7785;
+  margin: 6px 0 10px;
+}
+.art-social .art-head {
+  padding: 10px 0;
+  border: none;
+}
+.dm {
   display: flex;
   flex-direction: column;
-  justify-content: center;
-  align-items: center;
-  overflow: hidden;
+  gap: 8px;
+}
+.bubble {
+  align-self: flex-start;
+  max-width: 88%;
+  background: #e9edf2;
+  color: #16202c;
+  padding: 9px 12px;
+  border-radius: 14px 14px 14px 4px;
+  font-size: 14px;
+  line-height: 1.45;
+  word-break: break-word;
 }
 
-#phishingQuestion h2 {
-  margin: 0 0 2%;
-  font-size: clamp(1rem, 2vw, 1.5rem);
+/* url / address bar */
+.art-url {
+  padding: 14px;
 }
-
-.question-text {
-  width: 90%;
-  height: 30%;
+.url-caption {
+  font-size: 13px;
+  color: #44505f;
+  margin: 6px 0 10px;
+}
+.addressbar {
   display: flex;
-  justify-content: center;
   align-items: center;
-  margin: 0 0 3%;
+  gap: 8px;
+  background: #f1f4f8;
+  border: 1px solid #d7dde6;
+  border-radius: 999px;
+  padding: 9px 14px;
+}
+.addressbar .lock {
+  font-size: 12px;
+}
+.addressbar .url {
+  font-size: 13px;
+  color: #16202c;
+  word-break: break-all;
+}
+
+/* login mock */
+.art-login {
+  padding: 14px;
+  background: #f6f8fb;
+}
+.login-card {
+  margin-top: 12px;
+  background: #fff;
+  border: 1px solid #e0e6ee;
+  border-radius: 10px;
+  padding: 20px;
+  text-align: center;
+}
+.login-brand {
+  font-weight: 800;
+  letter-spacing: 0.1em;
+  font-size: 22px;
+  color: #c20030;
+  margin-bottom: 6px;
+}
+.login-note {
+  font-size: 13px;
+  color: #5b6b7b;
+  margin-bottom: 14px;
+}
+.fake-field {
+  height: 38px;
+  border: 1px solid #d2dae3;
+  border-radius: 6px;
+  background: #f7f9fc;
+  margin: 8px 0;
+}
+.fake-btn {
+  margin-top: 12px;
+  background: #117aca;
+  color: #fff;
+  padding: 10px;
+  border-radius: 6px;
+  font-weight: 600;
+  font-size: 14px;
+}
+
+/* choices */
+.choices {
+  display: flex;
+  gap: 12px;
+}
+.choice-btn {
+  flex: 1;
+  padding: 14px;
+  border-radius: var(--radius);
+  cursor: pointer;
+  font-family: "Space Grotesk", sans-serif;
+  font-weight: 600;
+  font-size: 15px;
+  letter-spacing: 0.04em;
+  border: 1px solid var(--line-bright);
+  background: var(--bg-2);
   color: var(--ink);
-  font-size: clamp(0.95rem, 1.8vw, 1.4rem);
-  overflow: hidden;
+  transition: border-color 0.15s, background 0.15s, color 0.15s;
+}
+.choice-btn.safe:hover:not(:disabled) {
+  border-color: var(--safe);
+  color: var(--safe);
+}
+.choice-btn.phish:hover:not(:disabled) {
+  border-color: var(--danger);
+  color: var(--danger);
+}
+.choice-btn:disabled {
+  cursor: default;
+  opacity: 0.9;
+}
+.choice-btn.right {
+  border-color: var(--safe);
+  background: rgba(55, 211, 153, 0.14);
+  color: var(--safe);
+}
+.choice-btn.wrong {
+  border-color: var(--danger);
+  background: rgba(255, 87, 101, 0.14);
+  color: var(--danger);
 }
 
-.answer-btn {
-  width: 80%;
-  height: 13%;
-  min-height: 42px;
-  max-height: 58px;
-  margin: 1% auto;
-  padding: 0 2%;
+/* feedback panel */
+.feedback {
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--bg-2);
+  padding: 14px 16px;
+}
+.fb-banner {
+  font-size: 15px;
+  font-weight: 600;
+  margin-bottom: 8px;
+}
+.fb-banner.ok {
+  color: var(--safe);
+}
+.fb-banner.bad {
+  color: var(--danger);
+}
+.fb-banner .gain {
+  font-family: "IBM Plex Mono", monospace;
+  font-size: 13px;
+  color: var(--cyan);
+  margin-left: 6px;
+}
+.fb-explain {
+  margin: 0 0 10px;
+  font-size: 14px;
+  line-height: 1.5;
+  color: var(--ink);
+}
+.fb-flags {
+  list-style: none;
+  margin: 0 0 14px;
+  padding: 0;
   display: flex;
-  justify-content: center;
-  align-items: center;
+  flex-direction: column;
+  gap: 6px;
+}
+.fb-flags li {
+  font-size: 13px;
+  color: var(--ink-dim);
+  padding-left: 18px;
+  position: relative;
+  line-height: 1.45;
+}
+.fb-flags li::before {
+  content: "•";
+  position: absolute;
+  left: 4px;
+  color: var(--ink-faint);
+}
+.fb-flags .flag-title {
+  padding-left: 0;
+  font-family: "IBM Plex Mono", monospace;
+  font-size: 11px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--ink-faint);
+  margin-bottom: 2px;
+}
+.fb-flags .flag-title::before {
+  content: none;
+}
+.fb-flags .flag-title.phish {
+  color: var(--danger);
+}
+.fb-flags .flag-title.safe {
+  color: var(--safe);
+}
+.fb-next {
+  width: 100%;
+}
+
+/* buttons reused by the end screen */
+.answer-btn {
+  width: 100%;
+  padding: 13px;
   border-radius: var(--radius);
   border: 1px solid var(--line-bright);
   background: var(--bg-2);
@@ -956,47 +1297,68 @@ a {
   cursor: pointer;
   font-family: "Space Grotesk", sans-serif;
   font-weight: 600;
-  font-size: clamp(0.85rem, 1.5vw, 1.05rem);
+  font-size: 14px;
   letter-spacing: 0.06em;
   text-transform: uppercase;
 }
-
 .answer-btn:hover {
   background: var(--panel-2);
   border-color: var(--cyan);
   color: var(--cyan);
 }
-
 .answer-btn:active {
   transform: translateY(1px);
 }
-
-#result {
-  height: 6%;
-  min-height: 28px;
-  display: flex;
-  justify-content: center;
-  align-items: center;
-  margin: 1% 0 0;
-  color: var(--cyan);
-  font-family: "IBM Plex Mono", monospace;
-  font-size: clamp(0.95rem, 1.7vw, 1.2rem);
-}
-
 .game-link {
-  width: 80%;
-  height: 13%;
-  min-height: 42px;
-  max-height: 58px;
-  margin: 1% auto;
-  display: flex;
+  display: block;
+  width: 100%;
   text-decoration: none;
 }
 
-.game-link .answer-btn {
-  width: 100%;
-  height: 100%;
+/* end screen */
+.game-box.ended {
+  text-align: center;
+  align-items: center;
+}
+.endscreen {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 0;
+}
+.endscreen h2 {
   margin: 0;
+  font-size: clamp(1.4rem, 4vw, 2rem);
+}
+.endscreen h2.win {
+  color: var(--safe);
+}
+.endscreen h2.lose {
+  color: var(--danger);
+}
+.end-score {
+  font-size: clamp(2.4rem, 9vw, 3.4rem);
+  font-weight: 700;
+  color: var(--cyan);
+}
+.end-sub {
+  color: var(--ink-dim);
+  font-size: 13px;
+  margin: 0;
+}
+.end-msg {
+  color: var(--ink-dim);
+  font-size: 14px;
+  max-width: 36ch;
+  margin: 6px 0 4px;
+}
+.end-actions {
+  width: min(320px, 100%);
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-top: 8px;
 }.switch {
   position: relative;
   display: inline-flex;

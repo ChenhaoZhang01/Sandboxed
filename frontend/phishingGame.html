@@ -30,155 +30,366 @@
         Sandboxer
       </div>
       <span class="tag mono">SPOT THE PHISH</span>
-      <a href = "index.html"><button class = "btn btn-ghost">Home</button></a>
-      <div class="api-config">
-        <label for="api">API</label>
-        <input id="api" spellcheck="false" />
-      </div>
+      <a href="index.html"><button class="btn btn-ghost">Home</button></a>
+      <a href="/leaderboard.html"><button class="btn btn-ghost">Leaderboard</button></a>
     </header>
 
     <main class="game-wrap">
-        <!-- GAME -->
-        <h1>Spot the Phish</h1>
-        <div class="game-box">
-            <div class="progress-bar">
-            <div id="progress"></div>
-            </div>
-
-            <div class="score-row">
-            <p>Streak: <span id="streak">0</span></p>
-            <p>Best: <span id="best">0</span></p>
-            </div>
-
-            <div id="phishingQuestion"></div>
-            <p id="result"></p>
+      <div class="game-box trainer" id="game-box">
+        <!-- HUD -->
+        <div class="trainer-hud">
+          <span class="lives" id="lives" aria-label="Lives"></span>
+          <span class="hud-tags">
+            <span class="cat-chip mono" id="cat-chip">—</span>
+            <span class="diff" id="diff" aria-label="Difficulty"></span>
+          </span>
+          <span class="hud-score">
+            <span class="score-mult mono" id="mult"></span>
+            <span class="score-val mono" id="score">0</span>
+          </span>
         </div>
-        <script src = "phishingQuestions.js"></script>
-        <script>
-            let currentQuestion = 0;
-            let streak = 0;
-            let best = 0;
 
-            // Daily leaderboard submission. Uses the same backend the app/extension
-            // use; honors a custom API set in the main app (localStorage key).
-            const API_BASE = (localStorage.getItem("sandboxed_api") || "https://sandboxed.fly.dev").replace(/\/$/, "");
-            let scoreSubmitted = false;
-            async function submitScore(score) {
-              if (scoreSubmitted) return;
-              scoreSubmitted = true;
-              const name = (prompt("Round over! Enter a name for today's leaderboard (cancel to skip):", "") || "").trim();
-              if (!name) return;
-              try {
-                await fetch(API_BASE + "/leaderboard", {
-                  method: "POST",
-                  headers: { "Content-Type": "application/json" },
-                  body: JSON.stringify({ name, score }),
-                });
-              } catch (e) {
-                /* best-effort — never block the game */
-              }
-            }
+        <!-- progress through the deck + per-question timer -->
+        <div class="progress-bar"><div id="progress"></div></div>
+        <div class="timer-bar"><div id="timer-fill"></div></div>
 
-            function showQuestion() {
-            const q = questions[currentQuestion];
+        <!-- prompt -->
+        <p class="trainer-prompt" id="prompt">Legit message, or phishing?</p>
 
-            document.getElementById("streak").textContent = streak;
-            document.getElementById("best").textContent = best;
+        <!-- the artifact under inspection -->
+        <div class="artifact-stage" id="artifact"></div>
 
-            const progressPercent = (currentQuestion / questions.length) * 100;
-            document.getElementById("progress").style.width = progressPercent + "%";
+        <!-- choices -->
+        <div class="choices" id="choices">
+          <button class="choice-btn safe" id="choose-safe" type="button">✓ Legit</button>
+          <button class="choice-btn phish" id="choose-phish" type="button">⚠ Phishing</button>
+        </div>
 
-            document.getElementById("result").textContent = "";
-
-            document.getElementById("phishingQuestion").innerHTML = `
-                <h2>Question ${currentQuestion + 1}</h2>
-                <p class="question-text">${q.question}</p>
-
-                <button class="answer-btn" type="button" onclick="checkAnswer('Yes')">Yes</button>
-                <button class="answer-btn" type="button" onclick="checkAnswer('No')">No</button>
-            `;
-            }
-
-            function checkAnswer(userAnswer) {
-            const q = questions[currentQuestion];
-
-            if (userAnswer === q.answer) {
-                streak++;
-                best = Math.max(best, streak);
-
-                document.getElementById("result").textContent = "Correct!";
-
-                currentQuestion++;
-
-                if (currentQuestion >= questions.length) {
-                    const finalScore = streak;
-                    setTimeout(() => showWinScreen(finalScore), 800);
-                } else {
-                    setTimeout(showQuestion, 800);
-                }
-            } else {
-                    setTimeout(showGameOver, 500);
-            }
-            }
-
-            function showGameOver() {
-            document.getElementById("progress").style.width = "0%";
-
-            submitScore(streak);
-
-            document.getElementById("phishingQuestion").innerHTML = `
-                <h2>Game Over</h2>
-                <p>You lost after getting ${streak} correct.</p>
-                <button class="answer-btn" type="button" onclick="restartGame()">Play Again</button>
-                <a href="/leaderboard.html" class="game-link">
-                <button class="answer-btn" type="button">Leaderboard</button>
-                </a>
-                <a href="index.html" class="game-link">
-                <button class="answer-btn" type="button">Exit</button>
-                </a>
-            `;
-
-            document.getElementById("result").textContent = "";
-            streak = 0;
-            currentQuestion = 0;
-            document.getElementById("streak").textContent = streak;
-            document.getElementById("best").textContent = best;
-            }
-
-            function showWinScreen(finalScore) {
-                best = Math.max(best, finalScore);
-                document.getElementById("streak").textContent = finalScore;
-                document.getElementById("best").textContent = best;
-                document.getElementById("progress").style.width = "100%";
-
-                submitScore(finalScore);
-
-                document.getElementById("phishingQuestion").innerHTML = `
-                    <h2>You Win!</h2>
-                    <p>You spotted all the phishing traps.</p>
-                    <p>Final Score: ${streak}</p>
-                    <button class="answer-btn" type="button" onclick="restartGame()">Play Again</button>
-                    <a href="/leaderboard.html" class="game-link">
-                    <button class="answer-btn" type="button">Leaderboard</button>
-                    </a>
-                    <a href="index.html" class = "game-link">
-                    <button class="answer-btn" type="button">Exit</button>
-                    </a>
-                `;
-
-                document.getElementById("result").textContent = "";
-            }
-
-            function restartGame() {
-            currentQuestion = 0;
-            streak = 0;
-            scoreSubmitted = false;
-            showQuestion();
-            }
-
-            showQuestion();
-            
-        </script>
+        <!-- feedback (revealed after answering) -->
+        <div class="feedback hidden" id="feedback">
+          <div class="fb-banner" id="fb-banner"></div>
+          <p class="fb-explain" id="fb-explain"></p>
+          <ul class="fb-flags" id="fb-flags"></ul>
+          <button class="answer-btn fb-next" id="fb-next" type="button">Next →</button>
+        </div>
+      </div>
     </main>
+
+    <script src="phishingQuestions.js"></script>
+    <script>
+      // --- leaderboard (same backend the app/extension use) ---
+      const API_BASE = (localStorage.getItem("sandboxed_api") || "https://sandboxed.fly.dev").replace(/\/$/, "");
+      let scoreSubmitted = false;
+      async function submitScore(score) {
+        if (scoreSubmitted) return;
+        scoreSubmitted = true;
+        const name = (window.prompt("Round over! Enter a name for today's leaderboard (cancel to skip):", "") || "").trim();
+        if (!name) return;
+        try {
+          await fetch(API_BASE + "/leaderboard", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ name, score }),
+          });
+        } catch (e) {
+          /* best-effort — never block the game */
+        }
+      }
+
+      // --- config ---
+      const LIVES = 3;
+      const QUESTION_TIME = 20; // seconds
+      const BASE_POINTS = 100;
+
+      const $ = (id) => document.getElementById(id);
+      const esc = (s) =>
+        String(s).replace(/[&<>"']/g, (c) =>
+          ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c])
+        );
+
+      // --- state ---
+      let deck = [];
+      let idx = 0;
+      let score = 0;
+      let streak = 0;
+      let lives = LIVES;
+      let correctCount = 0;
+      let answered = false;
+      let timeLeft = QUESTION_TIME;
+      let timer = null;
+
+      function multiplier() {
+        return 1 + Math.min(streak, 5) * 0.25; // up to 2.25x
+      }
+
+      // Shuffle within each difficulty tier, then play easiest → hardest.
+      function buildDeck() {
+        const byTier = { 1: [], 2: [], 3: [] };
+        scenarios.forEach((s) => {
+          (byTier[s.difficulty] || (byTier[s.difficulty] = [])).push(s);
+        });
+        const shuffle = (a) => {
+          for (let i = a.length - 1; i > 0; i--) {
+            const j = Math.floor(Math.random() * (i + 1));
+            [a[i], a[j]] = [a[j], a[i]];
+          }
+          return a;
+        };
+        return [...shuffle(byTier[1]), ...shuffle(byTier[2]), ...shuffle(byTier[3])];
+      }
+
+      // --- artifact rendering ---
+      function bubbles(lines) {
+        return lines.map((l) => `<div class="bubble">${esc(l)}</div>`).join("");
+      }
+      function addressBar(addr) {
+        return `<div class="addressbar"><span class="lock">🔒</span><span class="url mono">${esc(addr)}</span></div>`;
+      }
+      function renderArtifact(s) {
+        if (s.category === "email") {
+          const e = s.email;
+          const linkRow = e.link
+            ? `<a class="art-link" href="#" onclick="return false">${esc(e.link.text)}</a>
+               <div class="link-reveal mono">↳ link goes to: <span class="url">${esc(e.link.url)}</span></div>`
+            : "";
+          return `
+            <div class="art art-email">
+              <div class="art-head">
+                <div class="avatar">${esc((e.fromName || "?")[0])}</div>
+                <div class="art-id">
+                  <div class="from-name">${esc(e.fromName)}</div>
+                  <div class="from-addr mono">${esc(e.fromAddr)}</div>
+                </div>
+                <div class="art-app">✉ Email</div>
+              </div>
+              <div class="subject">${esc(e.subject)}</div>
+              <div class="art-body">
+                ${e.lines.map((l) => `<p>${esc(l)}</p>`).join("")}
+                ${linkRow}
+              </div>
+            </div>`;
+        }
+        if (s.category === "sms") {
+          return `
+            <div class="art art-sms">
+              <div class="art-app">💬 Text message</div>
+              <div class="sms-sender mono">${esc(s.sms.sender)}</div>
+              <div class="dm">${bubbles(s.sms.lines)}</div>
+            </div>`;
+        }
+        if (s.category === "url") {
+          return `
+            <div class="art art-url">
+              <div class="art-app">🔗 Link / QR code</div>
+              <div class="url-caption">${esc(s.url.caption)}</div>
+              ${addressBar(s.url.address)}
+            </div>`;
+        }
+        if (s.category === "login") {
+          const l = s.login;
+          return `
+            <div class="art art-login">
+              ${addressBar(l.address)}
+              <div class="login-card">
+                <div class="login-brand">${esc(l.brand)}</div>
+                <div class="login-note">${esc(l.note)}</div>
+                <div class="fake-field"></div>
+                <div class="fake-field"></div>
+                <div class="fake-btn">Sign in</div>
+              </div>
+            </div>`;
+        }
+        if (s.category === "social") {
+          const so = s.social;
+          return `
+            <div class="art art-social">
+              <div class="art-app">${esc(so.app)}</div>
+              <div class="art-head">
+                <div class="avatar">${esc((so.name || "?")[0])}</div>
+                <div class="art-id">
+                  <div class="from-name">${esc(so.name)}</div>
+                  <div class="from-addr mono">${esc(so.handle)}</div>
+                </div>
+              </div>
+              <div class="dm">${bubbles(so.lines)}</div>
+            </div>`;
+        }
+        return "";
+      }
+
+      // --- HUD ---
+      function renderHud(s) {
+        $("lives").innerHTML = Array.from({ length: LIVES }, (_, i) =>
+          `<span class="heart ${i < lives ? "" : "lost"}">♥</span>`
+        ).join("");
+        $("cat-chip").textContent = s.category.toUpperCase();
+        $("diff").innerHTML = Array.from({ length: 3 }, (_, i) =>
+          `<span class="dot ${i < s.difficulty ? "on" : ""}"></span>`
+        ).join("");
+        $("score").textContent = score;
+        const m = multiplier();
+        $("mult").textContent = streak >= 2 ? "x" + m.toFixed(2).replace(/0+$/, "").replace(/\.$/, "") : "";
+        $("progress").style.width = (idx / deck.length) * 100 + "%";
+      }
+
+      // --- timer ---
+      function stopTimer() {
+        if (timer) {
+          clearInterval(timer);
+          timer = null;
+        }
+      }
+      function startTimer() {
+        stopTimer();
+        timeLeft = QUESTION_TIME;
+        const fill = $("timer-fill");
+        fill.style.width = "100%";
+        fill.classList.remove("low");
+        const tickMs = 100;
+        timer = setInterval(() => {
+          timeLeft -= tickMs / 1000;
+          if (timeLeft <= 0) {
+            timeLeft = 0;
+            fill.style.width = "0%";
+            stopTimer();
+            choose(null); // time's up = a miss
+            return;
+          }
+          const pct = (timeLeft / QUESTION_TIME) * 100;
+          fill.style.width = pct + "%";
+          fill.classList.toggle("low", pct <= 30);
+        }, tickMs);
+      }
+
+      // --- flow ---
+      function renderScenario() {
+        const s = deck[idx];
+        answered = false;
+        renderHud(s);
+        $("artifact").innerHTML = renderArtifact(s);
+        $("feedback").classList.add("hidden");
+        $("choices").classList.remove("hidden");
+        ["choose-safe", "choose-phish"].forEach((id) => {
+          const b = $(id);
+          b.disabled = false;
+          b.classList.remove("dim", "right", "wrong");
+        });
+        startTimer();
+      }
+
+      function choose(answer) {
+        if (answered) return;
+        answered = true;
+        stopTimer();
+        const s = deck[idx];
+        const timedOut = answer === null;
+        const correct = !timedOut && answer === s.answer;
+
+        $("choose-safe").disabled = true;
+        $("choose-phish").disabled = true;
+
+        // highlight the truth; flag a wrong pick
+        (s.answer === "safe" ? $("choose-safe") : $("choose-phish")).classList.add("right");
+        if (!correct && !timedOut) {
+          (answer === "safe" ? $("choose-safe") : $("choose-phish")).classList.add("wrong");
+        }
+
+        if (correct) {
+          const speedBonus = Math.round(timeLeft) * 5;
+          const gained = Math.round((BASE_POINTS + speedBonus) * multiplier());
+          score += gained;
+          streak += 1;
+          correctCount += 1;
+          showFeedback(s, { ok: true, gained, timedOut: false });
+        } else {
+          streak = 0;
+          lives -= 1;
+          showFeedback(s, { ok: false, gained: 0, timedOut });
+        }
+        renderHud(s);
+      }
+
+      function showFeedback(s, { ok, gained, timedOut }) {
+        const banner = $("fb-banner");
+        const verdictWord = s.answer === "phish" ? "Phishing" : "Legit";
+        banner.className = "fb-banner " + (ok ? "ok" : "bad");
+        banner.innerHTML = ok
+          ? `✓ Correct — this was <b>${verdictWord}</b> <span class="gain">+${gained}</span>`
+          : (timedOut ? "⏱ Time's up — " : "✗ Not quite — ") + `this was <b>${verdictWord}</b>`;
+
+        $("fb-explain").textContent = s.explanation || "";
+
+        const flagTitle = s.answer === "phish" ? "Red flags" : "Why it's legit";
+        $("fb-flags").innerHTML =
+          `<li class="flag-title ${s.answer}">${flagTitle}</li>` +
+          (s.flags || []).map((f) => `<li>${esc(f)}</li>`).join("");
+
+        $("choices").classList.add("hidden");
+        $("feedback").classList.remove("hidden");
+        $("fb-next").textContent =
+          lives <= 0 ? "See results →" : idx + 1 >= deck.length ? "Finish →" : "Next →";
+        $("fb-next").focus();
+      }
+
+      function next() {
+        idx += 1;
+        if (lives <= 0) return showEnd(false);
+        if (idx >= deck.length) return showEnd(true);
+        renderScenario();
+      }
+
+      function showEnd(win) {
+        stopTimer();
+        const total = deck.length;
+        const accuracy = Math.round((correctCount / total) * 100) || 0;
+        const box = $("game-box");
+        box.classList.add("ended");
+        box.innerHTML = `
+          <div class="endscreen">
+            <h2 class="${win ? "win" : "lose"}">${win ? "🏆 Round Complete!" : "💥 Game Over"}</h2>
+            <div class="end-score mono">${score}</div>
+            <p class="end-sub mono">${correctCount}/${total} correct · ${accuracy}% accuracy</p>
+            <p class="end-msg">${
+              win
+                ? "You cleared the whole deck. Sharp eyes!"
+                : "You ran out of lives — but every miss taught you a red flag."
+            }</p>
+            <div class="end-actions">
+              <button class="answer-btn" type="button" id="again">Play again</button>
+              <a class="game-link" href="/leaderboard.html"><button class="answer-btn" type="button">Leaderboard</button></a>
+              <a class="game-link" href="index.html"><button class="answer-btn" type="button">Exit</button></a>
+            </div>
+          </div>`;
+        $("again").addEventListener("click", () => location.reload());
+        submitScore(score);
+      }
+
+      function startGame() {
+        deck = buildDeck();
+        idx = 0;
+        score = 0;
+        streak = 0;
+        lives = LIVES;
+        correctCount = 0;
+        scoreSubmitted = false;
+        renderScenario();
+      }
+
+      $("choose-safe").addEventListener("click", () => choose("safe"));
+      $("choose-phish").addEventListener("click", () => choose("phish"));
+      $("fb-next").addEventListener("click", next);
+      // keyboard: ← / S = legit, → / P = phishing, Enter = next
+      document.addEventListener("keydown", (e) => {
+        const choicesVisible = $("choices") && !$("choices").classList.contains("hidden");
+        if (!answered && choicesVisible) {
+          if (e.key === "ArrowLeft" || e.key.toLowerCase() === "s") choose("safe");
+          else if (e.key === "ArrowRight" || e.key.toLowerCase() === "p") choose("phish");
+        } else if (e.key === "Enter") {
+          if ($("feedback") && !$("feedback").classList.contains("hidden")) next();
+        }
+      });
+
+      startGame();
+    </script>
   </body>
 </html>
