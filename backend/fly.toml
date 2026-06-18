@@ -12,6 +12,9 @@ primary_region = 'sjc'
 [env]
   NODE_ENV = 'production'
   PORT = '8787'
+  CLAMD_HOST = '127.0.0.1'
+  CLAMD_PORT = '3310'
+  CLAM_INIT_TIMEOUT_MS = '5000'
 
 [http_service]
   internal_port = 8787

@@ -6,7 +6,15 @@
 # bump this tag to the same version or the cached Chrome won't match.
 FROM ghcr.io/puppeteer/puppeteer:24.43.1
 
-# The base image runs as the non-root `pptruser`.
+USER root
+
+# Install a local ClamAV daemon. The app talks to it over 127.0.0.1:3310.
+# freshclam is run at build time so the container starts quickly at runtime.
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends clamav-daemon clamav-freshclam \
+    && freshclam --stdout || true \
+    && rm -rf /var/lib/apt/lists/*
+
 WORKDIR /app
 
 # Don't re-download Chromium; the image already ships it in Puppeteer's cache
@@ -14,12 +22,18 @@ WORKDIR /app
 # PUPPETEER_EXECUTABLE_PATH — this image installs Chrome under the cache dir,
 # not /usr/bin, so puppeteer.launch() must resolve it itself.
 ENV PUPPETEER_SKIP_DOWNLOAD=true \
-    NODE_ENV=production
+    NODE_ENV=production \
+    CLAMD_HOST=127.0.0.1 \
+    CLAMD_PORT=3310
 
 COPY --chown=pptruser:pptruser package*.json ./
 RUN npm ci --omit=dev
 
 COPY --chown=pptruser:pptruser . .
+COPY --chown=pptruser:pptruser docker-entrypoint.sh /usr/local/bin/docker-entrypoint.sh
+RUN chmod +x /usr/local/bin/docker-entrypoint.sh
 
 EXPOSE 8787
+USER pptruser
+ENTRYPOINT ["/usr/local/bin/docker-entrypoint.sh"]
 CMD ["node", "src/server.js"]
