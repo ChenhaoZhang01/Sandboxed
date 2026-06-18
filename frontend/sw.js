@@ -1,7 +1,7 @@
 // Service worker: caches the app shell so Sandboxed installs and launches
 // offline. The detonation API is a different origin and is never cached —
 // requests to it always go to the network.
-const CACHE = "sandboxed-v4";
+const CACHE = "sandboxed-v5";
 const SHELL = [
   "./",
   "./index.html",
