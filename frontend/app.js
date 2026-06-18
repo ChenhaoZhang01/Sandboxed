@@ -1,5 +1,5 @@
 const $ = (id) => document.getElementById(id);
-const DEFAULT_API = "https://sandboxed-backend-production.up.railway.app";
+const DEFAULT_API = "https://sandboxed.fly.dev";
 
 // --- API base, persisted ---
 const apiInput = $("api");
@@ -7,6 +7,10 @@ apiInput.value = localStorage.getItem("sandboxed_api") || DEFAULT_API;
 apiInput.addEventListener("change", () =>
   localStorage.setItem("sandboxed_api", apiInput.value.trim())
 );
+const checked = (id, fallback = false) => {
+  const el = $(id);
+  return el ? el.checked : fallback;
+};
 const apiBase = () => (apiInput.value.trim() || DEFAULT_API).replace(/\/$/, "");
 
 // --- elements ---
@@ -80,7 +84,7 @@ async function detonate(rawUrl) {
 
   try {
     let verifiedLinks = [];
-    if($("historySwitch").checked){
+    if (checked("historySwitch", true)) {
       try {
         verifiedLinks = await fetchVerifiedLinks();
       } catch (err) {
@@ -128,12 +132,12 @@ async function detonate(rawUrl) {
 
 function currentAnalysisLayers() {
   return {
-    domainAge: $("domainAgeSwitch").checked,
-    safeBrowsing: $("safeBrowsingSwitch").checked,
-    phishingEnrichment: $("phishingSwitch").checked,
-    recordReplay: $("replaySwitch").checked,
-    credentialTrap: $("trapSwitch").checked,
-    aiNarrative: $("narrativeSwitch").checked,
+    domainAge: checked("domainAgeSwitch", true),
+    safeBrowsing: checked("safeBrowsingSwitch", true),
+    phishingEnrichment: checked("phishingSwitch"),
+    recordReplay: checked("replaySwitch", true),
+    credentialTrap: checked("trapSwitch"),
+    aiNarrative: checked("narrativeSwitch"),
   };
 }
 
@@ -545,7 +549,7 @@ function wsBase() {
 }
 function setupLive(url) {
   liveUrl = url;
-  if ($("liveSwitch").checked && url) {
+  if (checked("liveSwitch") && url) {
     chamberTools.classList.remove("hidden");
     liveStartBtn.classList.remove("hidden");
   } else {
@@ -608,7 +612,7 @@ function stopLive() {
   }
   liveCanvas.classList.add("hidden");
   liveStopBtn.classList.add("hidden");
-  if ($("liveSwitch").checked && liveUrl) liveStartBtn.classList.remove("hidden");
+  if (checked("liveSwitch") && liveUrl) liveStartBtn.classList.remove("hidden");
 }
 // Reset all replay/live UI between detonations (called from resetView).
 function teardownExtras() {
