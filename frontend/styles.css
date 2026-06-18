@@ -179,13 +179,6 @@ a {
   .wrap {
     grid-template-columns: 1fr;
   }
-  /* Single column: the console is stacked above the results, not a sidebar.
-     Keeping it position:sticky here pins it while the results panel scrolls up
-     and paints over it ("the chamber moves up through the page"). */
-  .console {
-    position: static;
-    top: auto;
-  }
 }
 
 /* ---------- phone layout ---------- */
@@ -255,10 +248,6 @@ a {
   .wrap {
     padding: 20px 14px 56px;
   }
-  /* the sticky console offset assumes the taller desktop bar */
-  .console {
-    position: static;
-  }
 }
 
 .panel {
@@ -284,9 +273,16 @@ a {
 }
 
 /* ---------- console ---------- */
-.console {
-  position: sticky;
-  top: 92px;
+/* Sticky only in the two-column desktop layout. Below 880px the console stacks
+   above the results panel; pinning it there makes the results slide up and
+   paint over it. (This is min-width-scoped instead of overridden in a media
+   query because the base .console rule sits later in the file and would win on
+   source order.) */
+@media (min-width: 881px) {
+  .console {
+    position: sticky;
+    top: 92px;
+  }
 }
 .console .body {
   padding: 20px 18px 22px;
