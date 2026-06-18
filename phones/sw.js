@@ -1,4 +1,4 @@
-const CACHE = "sandboxed-phone-v1";
+const CACHE = "sandboxed-phone-v2";
 const SHELL = [
   "./",
   "./index.html",
