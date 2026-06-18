@@ -20,10 +20,11 @@ if [ -x "$CLAMD_BIN" ]; then
     -e 's|^#\?TCPSocket .*|TCPSocket '"$CLAMD_PORT"'|' \
     -e 's|^#\?TCPAddr .*|TCPAddr '"$CLAMD_HOST"'|' \
     -e 's|^#\?User .*|User pptruser|' \
-    -e 's|^#\?LocalSocket .*|LocalSocket /tmp/clamd.ctl|' \
     -e 's|^#\?PidFile .*|PidFile /tmp/clamd.pid|' \
     -e 's|^#\?TemporaryDirectory .*|TemporaryDirectory /tmp|' \
     -e 's|^#\?ConcurrentDatabaseReload .*|ConcurrentDatabaseReload no|' \
+    -e '/^#\?LocalSocket /d' \
+    -e '/^#\?LocalSocketGroup /d' \
     "$CLAMD_CONF"
 
   if ! grep -q '^TCPSocket ' "$CLAMD_CONF"; then
