@@ -1,0 +1,225 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <title>Sandboxed — detonate links safely</title>
+
+    <!-- PWA -->
+    <link rel="manifest" href="manifest.webmanifest" />
+    <meta name="theme-color" content="#0E1217" />
+    <link rel="icon" href="icons/favicon-32.png" sizes="32x32" type="image/png" />
+    <link rel="apple-touch-icon" href="icons/apple-touch-icon-180.png" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <meta name="apple-mobile-web-app-title" content="Sandboxed" />
+
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <header class="topbar">
+      <div class="brand">
+        <span class="glyph" aria-hidden="true"></span>
+        Sandboxed
+      </div>
+      <span class="tag mono">URL DETONATION CHAMBER</span>
+      <a class="trainer-link" href = "phishingGame.html"><button class = "btn btn-ghost">Spot the phish trainer</button></a>
+      <div class="api-config">
+        <label for="api">API</label>
+        <input id="api" spellcheck="false" />
+      </div>
+      <div class="history-config">
+        <label class="switch">
+          <input type="checkbox" id="historySwitch" checked>
+          <span class="slider round"></span>
+          <span class="switch-label">History</span>
+        </label>
+      </div>
+    </header>
+
+    <main class="wrap">
+      <!-- CONSOLE -->
+      <section class="panel console" aria-label="Detonation console">
+        <div class="panel-head">
+          <span class="eyebrow">Console</span>
+          <span class="eyebrow" id="console-state">Ready</span>
+        </div>
+        <div class="body">
+          <label class="field-label" for="url">Suspicious link</label>
+          <input
+            id="url"
+            class="url-input"
+            placeholder="paste a url or scan a qr code…"
+            spellcheck="false"
+            autocomplete="off"
+          />
+          <div class="actions">
+            <button id="go" class="btn btn-primary">Detonate</button>
+            <button id="scan" class="btn btn-ghost" type="button">Scan QR</button>
+          </div>
+
+          <div class="options">
+            <span class="field-label">Options</span>
+            <label class="switch switch-sm">
+              <input type="checkbox" id="domainAgeSwitch" checked>
+              <span class="slider round"></span>
+              <span class="switch-label"><b>Domain age</b> — RDAP age lookup scoring</span>
+            </label>
+            <label class="switch switch-sm">
+              <input type="checkbox" id="safeBrowsingSwitch" checked>
+              <span class="slider round"></span>
+              <span class="switch-label"><b>Safe Browsing</b> — Google reputation check</span>
+            </label>
+            <label class="switch switch-sm">
+              <input type="checkbox" id="phishingSwitch">
+              <span class="slider round"></span>
+              <span class="switch-label"><b>Phishing detector</b> — spoof / clone detection signals</span>
+            </label>
+            <label class="switch switch-sm">
+              <input type="checkbox" id="replaySwitch" checked>
+              <span class="slider round"></span>
+              <span class="switch-label"><b>Record replay</b> — capture a scrubable video of the detonation</span>
+            </label>
+            <label class="switch switch-sm">
+              <input type="checkbox" id="trapSwitch">
+              <span class="slider round"></span>
+              <span class="switch-label"><b>Password trap</b> — fill canary creds &amp; catch where they'd be sent</span>
+            </label>
+            <label class="switch switch-sm">
+              <input type="checkbox" id="liveSwitch">
+              <span class="slider round"></span>
+              <span class="switch-label"><b>Live explore</b> — open the sandbox &amp; click through it live</span>
+            </label>
+          </div>
+
+          <div id="qr-reader"></div>
+
+          <p class="hint">
+            The link opens in a sandboxed headless browser — never on your device.
+            We follow every redirect, screenshot the landing page, and score the risk.
+          </p>
+
+          <div class="samples">
+            <span class="field-label">Try one</span>
+            <div id="sample-chips">
+              <span class="chip" data-url="https://example.com">example.com</span>
+              <span class="chip" data-url="https://github.com">github.com</span>
+              <span class="chip" data-url="http://x.com">x.com</span>
+            </div>
+          </div>
+
+          <div class="dropzone-section">
+            <span class="field-label">Scan a PDF</span>
+            <div class="dropzone" id="dropzone" tabindex="0" role="button" aria-label="Drop a PDF here or click to browse for a file">
+              <div class="ring"></div>
+              <p>
+                Drop a PDF here or
+                <button type="button" id="pdf-browse-btn" class="dropzone-browse">browse</button>
+              </p>
+              <p class="dropzone-status mono" id="dropzone-status">Drop a PDF here or click to browse</p>
+              <input type="file" id="pdf-file-input" accept="application/pdf,.pdf" hidden />
+            </div>
+            <p class="hint">
+              Runs a quick static indicator check in your browser, then a real
+              ClamAV scan on the server. Nothing is uploaded except the PDF you choose.
+            </p>
+            <div class="scan-result hidden" id="scan-result"></div>
+          </div>
+        </div>
+      </section>
+
+      <!-- CHAMBER + READOUT -->
+      <section class="panel" aria-label="Results">
+        <div class="panel-head chamber-head">
+          <span class="eyebrow">Containment chamber</span>
+          <span class="status mono" id="status" data-state="idle">
+            <span class="dot"></span><span id="status-text">Idle</span>
+          </span>
+        </div>
+
+        <div class="chamber" id="chamber">
+          <div class="grid-bg" aria-hidden="true"></div>
+
+          <div class="idle" id="idle">
+            <div class="ring"></div>
+            <p>Awaiting target</p>
+          </div>
+
+          <div class="spinner hidden" id="spinner">
+            <p>Detonating…</p>
+            <div class="bar"><span></span></div>
+          </div>
+
+          <img class="shot hidden" id="shot" alt="Screenshot of the detonated page" />
+          <canvas class="live-canvas hidden" id="live-canvas" tabindex="0"
+                  aria-label="Live interactive sandbox view"></canvas>
+          <div class="glass hidden" id="glass"></div>
+          <div class="stamp hidden" id="stamp"></div>
+        </div>
+
+        <div class="chamber-tools hidden" id="chamber-tools">
+          <div class="replay-controls hidden" id="replay-controls">
+            <button class="btn btn-ghost btn-sm" id="replay-play" type="button">▶ Replay</button>
+            <input type="range" id="replay-scrub" class="replay-scrub" min="0" max="0" value="0"
+                   aria-label="Scrub replay" />
+            <span class="mono" id="replay-time">0 / 0</span>
+          </div>
+          <button class="btn btn-ghost btn-sm hidden" id="live-start" type="button">Explore live ▶</button>
+          <button class="btn btn-ghost btn-sm hidden" id="live-stop" type="button">Stop live ■</button>
+          <span class="mono live-note" id="live-note"></span>
+        </div>
+
+        <div class="error-box hidden" id="error"></div>
+
+        <div class="readout hidden" id="readout">
+          <div class="readout-grid">
+            <div class="meta">
+              <div class="k">Final destination</div>
+              <div class="v" id="m-final">—</div>
+            </div>
+            <div class="meta">
+              <div class="k">Domain age</div>
+              <div class="v" id="m-age">—</div>
+            </div>
+            <div class="meta">
+              <div class="k">Redirects</div>
+              <div class="v" id="m-redirects">—</div>
+            </div>
+            <div class="meta">
+              <div class="k">Page title</div>
+              <div class="v" id="m-title">—</div>
+            </div>
+            <div class="meta">
+              <div class="k">Phishing check</div>
+              <div class="v" id="m-phishing">—</div>
+            </div>
+            <div class="meta">
+              <div class="k">Password trap</div>
+              <div class="v" id="m-trap">—</div>
+            </div>
+          </div>
+
+          <div class="section-label">Trajectory</div>
+          <ul class="traj" id="traj"></ul>
+
+          <div class="section-label">Why</div>
+          <ul class="reasons" id="reasons"></ul>
+        </div>
+      </section>
+    </main>
+
+    <script
+      src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"
+      integrity="sha384-c9d8RFSL+u3exBOJ4Yp3HUJXS4znl9f+z66d1y54ig+ea249SpqR+w1wyvXz/lk+"
+      crossorigin="anonymous"
+    ></script>
+    <script src="app.js"></script>
+  </body>
+</html>
