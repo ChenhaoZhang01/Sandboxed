@@ -34,13 +34,6 @@ const browseBtn = $("pdf-browse-btn");
 const dropzoneStatus = $("dropzone-status");
 const scanResult = $("scan-result");
 
-// --- generic file scan elements ---
-const fileDropzone = $("file-dropzone");
-const anyFileInput = $("file-input");
-const fileBrowseBtn = $("file-browse-btn");
-const fileDropzoneStatus = $("file-dropzone-status");
-const fileScanResult = $("file-scan-result");
-
 //Settings
 const historySwitch = $("historySwitch")
 
@@ -320,63 +313,6 @@ function renderScanResult(filename, local, server) {
   scanResult.textContent = lines.join("\n");
   scanResult.classList.remove("hidden", "safe", "warn", "danger");
   scanResult.classList.add(infected ? "danger" : confirmedClean ? "safe" : "warn");
-}
-
-// Generic file checker: POST any file's raw bytes to the backend for a real
-// ClamAV scan (the same /scan-file the extension's download guard uses). Unlike
-// the PDF checker there's no client-side static heuristic — just the AV verdict.
-async function scanFileOnServer(file) {
-  try {
-    const res = await fetch(apiBase() + "/scan-file", {
-      method: "POST",
-      headers: { "Content-Type": file.type || "application/octet-stream" },
-      body: file,
-    });
-    const data = await res.json().catch(() => null);
-    if (!res.ok) {
-      return { status: "error", message: (data && data.error) || `Server returned ${res.status}` };
-    }
-    return data;
-  } catch (err) {
-    return { status: "error", message: "Could not reach " + apiBase() + " (" + err.message + ")" };
-  }
-}
-
-async function handleScanFile(file) {
-  if (!file) return;
-
-  fileDropzoneStatus.textContent = "Scanning…";
-  fileDropzone.classList.add("scanning");
-  fileScanResult.classList.add("hidden");
-
-  try {
-    const server = await scanFileOnServer(file);
-    renderFileScanResult(file.name, server);
-  } finally {
-    fileDropzone.classList.remove("scanning");
-    fileDropzoneStatus.textContent = "Drop a file here or click to browse";
-    anyFileInput.value = "";
-  }
-}
-
-function renderFileScanResult(filename, server) {
-  const lines = [`File scan: ${filename}`, ""];
-
-  if (server.status === "infected") {
-    lines.push(`ClamAV: INFECTED — ${(server.viruses || []).join(", ") || "unknown signature"}`);
-  } else if (server.status === "clean") {
-    lines.push("ClamAV: clean.");
-  } else if (server.status === "unavailable") {
-    lines.push("ClamAV: scanner unavailable on server.");
-  } else {
-    lines.push(`ClamAV: could not complete scan (${server.message || "unknown error"}).`);
-  }
-
-  fileScanResult.textContent = lines.join("\n");
-  fileScanResult.classList.remove("hidden", "safe", "warn", "danger");
-  fileScanResult.classList.add(
-    server.status === "infected" ? "danger" : server.status === "clean" ? "safe" : "warn"
-  );
 }
 
 function showError(msg) {
@@ -904,34 +840,6 @@ dropzone.addEventListener("drop", (e) => {
   e.preventDefault();
   dropzone.classList.remove("dragover");
   handlePdfFile(e.dataTransfer.files && e.dataTransfer.files[0]);
-});
-
-// --- generic file dropzone ---
-fileBrowseBtn.addEventListener("click", () => anyFileInput.click());
-fileDropzone.addEventListener("click", (e) => {
-  if (e.target !== fileBrowseBtn) anyFileInput.click();
-});
-fileDropzone.addEventListener("keydown", (e) => {
-  if ((e.key === "Enter" || e.key === " ") && e.target === fileDropzone) {
-    e.preventDefault();
-    anyFileInput.click();
-  }
-});
-anyFileInput.addEventListener("change", () => handleScanFile(anyFileInput.files && anyFileInput.files[0]));
-
-["dragenter", "dragover"].forEach((evt) =>
-  fileDropzone.addEventListener(evt, (e) => {
-    e.preventDefault();
-    fileDropzone.classList.add("dragover");
-  })
-);
-["dragleave", "dragend"].forEach((evt) =>
-  fileDropzone.addEventListener(evt, () => fileDropzone.classList.remove("dragover"))
-);
-fileDropzone.addEventListener("drop", (e) => {
-  e.preventDefault();
-  fileDropzone.classList.remove("dragover");
-  handleScanFile(e.dataTransfer.files && e.dataTransfer.files[0]);
 });
 
 // --- PWA: register the service worker (offline app shell + installable) ---
