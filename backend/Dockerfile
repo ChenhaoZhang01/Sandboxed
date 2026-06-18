@@ -14,13 +14,15 @@ USER root
 # freshclam is run at build time so the container starts quickly at runtime.
 RUN apt-get update \
     && apt-get install -y --no-install-recommends clamav clamav-daemon clamav-freshclam \
+    && mkdir -p /var/lib/clamav /var/log/clamav /run/clamav \
     && freshclam --stdout || true \
     && rm -rf /var/lib/apt/lists/*
 
-# clamd and the runtime freshclam fallback (see docker-entrypoint.sh) run as the
-# non-root pptruser, so the signature DB dir must be writable by it.
-RUN mkdir -p /var/lib/clamav /run/clamav \
-    && chown -R pptruser:pptruser /var/lib/clamav /run/clamav
+# clamd, freshclam, and the runtime freshclam fallback (see docker-entrypoint.sh)
+# all run as the non-root pptruser, so the DB and log dirs must be writable by it.
+# (Creating /var/log/clamav before the build-time freshclam above also lets that
+# bake the signature DB into the image so cold starts don't re-download it.)
+RUN chown -R pptruser:pptruser /var/lib/clamav /var/log/clamav /run/clamav
 
 WORKDIR /app
 

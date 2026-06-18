@@ -14,7 +14,7 @@ if [ -x "$CLAMD_BIN" ]; then
   cp /etc/clamav/clamd.conf "$CLAMD_CONF"
   sed -i \
     -e 's|^#\?Foreground .*|Foreground true|' \
-    -e 's|^#\?LogFile .*|LogFile /dev/stdout|' \
+    -e 's|^#\?LogFile .*|LogFile /tmp/clamd.log|' \
     -e 's|^#\?LogTime .*|LogTime true|' \
     -e 's|^#\?DatabaseDirectory .*|DatabaseDirectory /var/lib/clamav|' \
     -e 's|^#\?TCPSocket .*|TCPSocket '"$CLAMD_PORT"'|' \
@@ -52,6 +52,10 @@ if [ -x "$CLAMD_BIN" ]; then
 
   "$CLAMD_BIN" --config-file="$CLAMD_CONF" &
   CLAMD_PID=$!
+
+  # clamd can't log to /dev/stdout (symlink chain errors), so it logs to a temp
+  # file — tail it so clamd's status still shows up in `fly logs`.
+  ( tail -n +1 -F /tmp/clamd.log 2>/dev/null & )
 
   for _ in $(seq 1 30); do
     if (echo > "/dev/tcp/$CLAMD_HOST/$CLAMD_PORT") >/dev/null 2>&1; then
