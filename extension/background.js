@@ -90,7 +90,9 @@ const ICON = chrome.runtime.getURL("icons/icon-192.png");
 function notify(id, title, message, buttons, extra = {}) {
   const opts = { type: "basic", iconUrl: ICON, title, message, ...extra };
   if (buttons) opts.buttons = buttons;
-  chrome.notifications.create(id, opts);
+  chrome.notifications.create(id, opts, () => {
+    if (chrome.runtime.lastError) console.warn("notify failed:", chrome.runtime.lastError.message);
+  });
 }
 
 async function installWindowOpenHook(tabId, frameId) {
@@ -242,23 +244,41 @@ chrome.notifications.onClicked.addListener((id) => {
 });
 
 chrome.notifications.onButtonClicked.addListener((id, btnIdx) => {
-  if (btnIdx !== 0) return;
-  if (openPendingRedirect(id)) return;
+  // Redirect prompt: single "Go anyway" button (index 0).
+  if (pendingRedirects.has(id)) {
+    if (btnIdx === 0) openPendingRedirect(id);
+    else {
+      pendingRedirects.delete(id);
+      chrome.notifications.clear(id);
+    }
+    return;
+  }
 
+  // Download review: [Allow download, Discard].
   const url = pendingDownloads.get(id);
   if (!url) return;
   pendingDownloads.delete(id);
   chrome.notifications.clear(id);
-  approvedDownloads.add(url);
-  chrome.downloads.download({ url });
+  if (btnIdx === 0) {
+    approvedDownloads.add(url); // let onCreated pass the re-issued download through
+    chrome.downloads.download({ url });
+  }
 });
 
 // ---------------------------------------------------------------------------
-// Download guard — holds downloads for review, optionally ClamAV-scanned.
+// Download guard — holds a download and shows an OS notification with Allow /
+// Discard. The notification is shown IMMEDIATELY on interception (not after the
+// scan) — re-fetching a just-cancelled URL can stall, and gating the popup on
+// that is why it previously never appeared. The ClamAV scan runs async and
+// updates the notification's text with the verdict when it's done.
 // ---------------------------------------------------------------------------
 const approvedDownloads = new Set(); // urls re-issued after the user allowed them
 const pendingDownloads = new Map(); // notificationId -> url awaiting Allow/Discard
+let dlSeq = 0;
 let lastGestureTs = 0;
+
+const fileNameOf = (item, url) =>
+  (item && item.filename ? item.filename.split(/[\\/]/).pop() : "") || SBX.hostOf(url);
 
 chrome.downloads.onCreated.addListener(async (item) => {
   const s = await ensureSettings();
@@ -276,6 +296,7 @@ chrome.downloads.onCreated.addListener(async (item) => {
   // Drive-by scope: a download right after a user gesture is treated as wanted.
   if (s.downloadGuard.scope === "driveby" && Date.now() - lastGestureTs <= 1500) return;
 
+  // Hold it: cancel the browser download.
   try {
     await chrome.downloads.cancel(item.id);
   } catch {}
@@ -283,54 +304,60 @@ chrome.downloads.onCreated.addListener(async (item) => {
     await chrome.downloads.erase({ id: item.id });
   } catch {}
 
-  if (s.downloadGuard.scan) scanDownload(url, item);
-  else promptDownload(url, item, null);
+  const name = fileNameOf(item, url);
+  const notifId = "sbx-dl-" + Date.now() + "-" + ++dlSeq;
+  pendingDownloads.set(notifId, url);
+
+  // Show the review NOW so it always appears; scan result is filled in after.
+  notify(
+    notifId,
+    "Download held for review",
+    name + (s.downloadGuard.scan ? " — scanning with ClamAV…" : " — choose Allow or Discard."),
+    [{ title: "Allow download" }, { title: "Discard" }],
+    { requireInteraction: true }
+  );
+
+  if (s.downloadGuard.scan) scanDownloadAndUpdate(notifId, url, name, item.mime || "");
 });
 
-const fileNameOf = (item, url) =>
-  (item && item.filename ? item.filename.split(/[\\/]/).pop() : "") || SBX.hostOf(url);
-
-async function scanDownload(url, item) {
-  const s = await ensureSettings();
-  const name = fileNameOf(item, url);
+// Re-fetch the file's bytes, ClamAV-scan them, and update the held notification's
+// message with the verdict. Time-bounded and best-effort: a failure just leaves
+// the "review manually" prompt — it never removes the Allow/Discard choice.
+async function scanDownloadAndUpdate(notifId, url, name, mime) {
+  const base = (await ensureSettings()).apiBase;
+  const ctrl = new AbortController();
+  const t = setTimeout(() => ctrl.abort(), 20000);
+  let message;
   try {
-    const bytes = await (await fetch(url)).arrayBuffer();
-    const res = await fetch(s.apiBase + "/scan-file", {
+    const bytes = await (await fetch(url, { signal: ctrl.signal })).arrayBuffer();
+    const res = await fetch(base + "/scan-file", {
       method: "POST",
-      headers: { "Content-Type": item.mime || "application/octet-stream" },
+      headers: { "Content-Type": mime || "application/octet-stream" },
       body: bytes,
+      signal: ctrl.signal,
     });
     const data = await res.json().catch(() => ({ status: "error" }));
-
     if (data.status === "infected") {
-      notify(
-        "sbx-dl-" + item.id,
-        "Download blocked — malware",
-        name + " is infected (" + ((data.viruses || []).join(", ") || "unknown") + "). Discarded."
-      );
-      return;
+      message = name + " — ⚠ INFECTED: " + ((data.viruses || []).join(", ") || "malware") + ". Discard recommended.";
+    } else if (data.status === "clean") {
+      message = name + " — ✓ ClamAV: clean.";
+    } else if (data.status === "unavailable") {
+      message = name + " — scanner unavailable; review manually.";
+    } else {
+      message = name + " — couldn't scan; review manually.";
     }
-    const note =
-      data.status === "clean"
-        ? "ClamAV: clean."
-        : data.status === "unavailable"
-        ? "Scanner unavailable."
-        : "Scan could not complete.";
-    promptDownload(url, item, note);
   } catch (e) {
-    promptDownload(url, item, "Couldn't scan (" + (e.message || e) + ").");
+    message = name + " — couldn't scan (" + (e.message || e) + "); review manually.";
+  } finally {
+    clearTimeout(t);
+  }
+  // Only update if the user hasn't already acted on / dismissed it.
+  if (pendingDownloads.has(notifId)) {
+    chrome.notifications.update(notifId, { message }, () => void chrome.runtime.lastError);
   }
 }
 
-function promptDownload(url, item, note) {
-  const id = "sbx-dlask-" + (item ? item.id : Date.now());
-  pendingDownloads.set(id, url);
-  notify(
-    id,
-    "Download held for review",
-    fileNameOf(item, url) + (note ? " — " + note : ""),
-    [{ title: "Allow download" }, { title: "Discard" }]
-  );
-}
-chrome.notifications.onClosed.addListener((id) => pendingDownloads.delete(id));
-chrome.notifications.onClosed.addListener((id) => pendingRedirects.delete(id));
+chrome.notifications.onClosed.addListener((id) => {
+  pendingRedirects.delete(id);
+  pendingDownloads.delete(id);
+});
