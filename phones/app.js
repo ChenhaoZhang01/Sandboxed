@@ -363,22 +363,17 @@ function renderPhishing(p) {
   const el = $("m-phishing");
   if (!el) return;
 
-  if (!p) {
-    el.textContent = "—";
-    el.className = "v";
-    return;
-  }
-
-  if (p.phishing) {
+  if (p && p.phishing) {
     el.innerHTML =
       "⚠️ Spoofing <strong>" + escapeHtml(p.spoofedBrand) + "</strong>" +
       " — real site: <a href=\"" + escapeHtml(p.expectedUrl) + "\" target=\"_blank\" rel=\"noopener\">" +
       escapeHtml(p.expectedUrl) + "</a>";
     el.className = "v phishing-warn";
-  } else {
-    el.textContent = "✓ No spoof detected";
-    el.className = "v phishing-ok";
+    return;
   }
+
+  el.textContent = "✓ No spoof detected";
+  el.className = "v phishing-ok";
 }
 
 function renderTrajectory(chain) {
@@ -428,8 +423,8 @@ function renderTrap(t) {
   const el = $("m-trap");
   if (!el) return;
   if (!t) {
-    el.textContent = "—";
-    el.className = "v";
+    el.textContent = "✓ No password trap detected";
+    el.className = "v phishing-ok";
     return;
   }
   if (t.blocked) {
@@ -443,8 +438,8 @@ function renderTrap(t) {
     el.textContent = "Filled canary creds; no submission captured.";
     el.className = "v";
   } else {
-    el.textContent = "No login form to trap.";
-    el.className = "v";
+    el.textContent = "✓ No password trap detected";
+    el.className = "v phishing-ok";
   }
 }
 

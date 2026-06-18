@@ -535,8 +535,8 @@ function renderTrap(t) {
   const el = $("m-trap");
   if (!el) return;
   if (!t) {
-    el.textContent = "—";
-    el.className = "v";
+    el.textContent = "✓ No password trap detected";
+    el.className = "v phishing-ok";
     return;
   }
   if (t.blocked) {
@@ -550,8 +550,8 @@ function renderTrap(t) {
     el.textContent = "Filled canary creds; no submission captured.";
     el.className = "v";
   } else {
-    el.textContent = "No login form to trap.";
-    el.className = "v";
+    el.textContent = "✓ No password trap detected";
+    el.className = "v phishing-ok";
   }
 }
 
