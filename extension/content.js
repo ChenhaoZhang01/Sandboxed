@@ -79,7 +79,9 @@
 
   function proceed(url, newTab) {
     approved.add(url);
-    if (newTab) window.open(url, "_blank", "noopener");
+    if (newTab) {
+      sendMessage({ type: "OPEN_URL", url });
+    }
     else window.location.assign(url);
   }
 

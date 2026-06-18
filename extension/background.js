@@ -44,6 +44,12 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
     return false;
   }
 
+  if (msg.type === "OPEN_URL" && msg.url) {
+    chrome.tabs.create({ url: msg.url, active: true });
+    sendResponse({ ok: true });
+    return false;
+  }
+
   // Drive-by download heuristic: content scripts report user gestures so the
   // download guard can tell a click-initiated download from an auto-started one.
   if (msg.type === "USER_GESTURE") {
@@ -85,6 +91,51 @@ function notify(id, title, message, buttons) {
   const opts = { type: "basic", iconUrl: ICON, title, message };
   if (buttons) opts.buttons = buttons;
   chrome.notifications.create(id, opts);
+}
+
+async function installWindowOpenHook(tabId, frameId) {
+  try {
+    await chrome.scripting.executeScript({
+      target: { tabId, frameIds: [frameId] },
+      world: "MAIN",
+      injectImmediately: true,
+      func: () => {
+        try {
+          const guardKey = "__sandboxedWindowOpenHookInstalled";
+          if (window[guardKey]) return;
+          Object.defineProperty(window, guardKey, {
+            value: true,
+            configurable: false,
+          });
+
+          const blockedOpen = function () {
+            return null;
+          };
+
+          try {
+            Object.defineProperty(window, "open", {
+              value: blockedOpen,
+              writable: false,
+              configurable: false,
+            });
+          } catch {
+            window.open = blockedOpen;
+          }
+
+          try {
+            const proto = window.Window && window.Window.prototype;
+            if (proto) {
+              Object.defineProperty(proto, "open", {
+                value: blockedOpen,
+                writable: false,
+                configurable: false,
+              });
+            }
+          } catch {}
+        } catch {}
+      },
+    });
+  } catch {}
 }
 
 // ---------------------------------------------------------------------------
@@ -131,9 +182,12 @@ chrome.webNavigation.onCreatedNavigationTarget.addListener(async (d) => {
 // exposes transitionQualifiers, so this is best-effort (the destination may
 // have begun loading); we navigate back off it and inform the user.
 chrome.webNavigation.onCommitted.addListener(async (d) => {
-  if (d.frameId !== 0 || !isHttp(d.url)) return;
-  const host = SBX.hostOf(d.url);
+  if (!isHttp(d.url)) return;
   const s = await ensureSettings();
+  if (s.redirectBlock.enabled) installWindowOpenHook(d.tabId, d.frameId);
+
+  if (d.frameId !== 0) return;
+  const host = SBX.hostOf(d.url);
   const isClientRedirect = (d.transitionQualifiers || []).includes("client_redirect");
   const prevHost = tabHost.get(d.tabId);
 
