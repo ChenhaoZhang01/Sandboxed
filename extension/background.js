@@ -87,8 +87,8 @@ async function ensureSettings() {
 const isHttp = (u) => /^https?:/i.test(u || "");
 const ICON = chrome.runtime.getURL("icons/icon-192.png");
 
-function notify(id, title, message, buttons) {
-  const opts = { type: "basic", iconUrl: ICON, title, message };
+function notify(id, title, message, buttons, extra = {}) {
+  const opts = { type: "basic", iconUrl: ICON, title, message, ...extra };
   if (buttons) opts.buttons = buttons;
   chrome.notifications.create(id, opts);
 }
@@ -142,6 +142,7 @@ async function installWindowOpenHook(tabId, frameId) {
 // Redirect blocker — stops popunders / script redirects (e.g. istreameast).
 // ---------------------------------------------------------------------------
 const approvedRedirects = new Set(); // urls the user chose to allow
+const pendingRedirects = new Map(); // notificationId -> blocked url
 const recentRedirects = new Map(); // url -> ts, dedupes rapid repeat popunders
 const tabHost = new Map(); // tabId -> last allowed top-frame host
 const redirectCooldown = new Map(); // tabId -> ts, breaks same-tab redirect loops
@@ -159,12 +160,30 @@ async function gateRedirect(dest) {
   if (s.redirectBlock.action === "scan") {
     openResult(dest); // detonates + shows the verdict window
   } else {
-    notify(
-      "sbx-redir-" + now,
-      "Sandboxed blocked a redirect",
-      "A page tried to send you to " + SBX.hostOf(dest)
-    );
+    promptRedirect(dest, now);
   }
+}
+
+function promptRedirect(dest, now) {
+  const id = "sbx-redir-" + now + "-" + Math.random().toString(36).slice(2, 8);
+  pendingRedirects.set(id, dest);
+  notify(
+    id,
+    "Sandboxed blocked a redirect",
+    "A page tried to send you to " + SBX.hostOf(dest) + ". Choose Go anyway to continue.",
+    [{ title: "Go anyway" }],
+    { requireInteraction: true }
+  );
+}
+
+function openPendingRedirect(id) {
+  const url = pendingRedirects.get(id);
+  if (!url) return false;
+  pendingRedirects.delete(id);
+  approvedRedirects.add(url);
+  chrome.notifications.clear(id);
+  chrome.tabs.create({ url, active: true });
+  return true;
 }
 
 // Popunders / new tabs+windows opened by a page.
@@ -216,6 +235,22 @@ chrome.webNavigation.onCommitted.addListener(async (d) => {
 chrome.tabs.onRemoved.addListener((id) => {
   tabHost.delete(id);
   redirectCooldown.delete(id);
+});
+
+chrome.notifications.onClicked.addListener((id) => {
+  openPendingRedirect(id);
+});
+
+chrome.notifications.onButtonClicked.addListener((id, btnIdx) => {
+  if (btnIdx !== 0) return;
+  if (openPendingRedirect(id)) return;
+
+  const url = pendingDownloads.get(id);
+  if (!url) return;
+  pendingDownloads.delete(id);
+  chrome.notifications.clear(id);
+  approvedDownloads.add(url);
+  chrome.downloads.download({ url });
 });
 
 // ---------------------------------------------------------------------------
@@ -297,15 +332,5 @@ function promptDownload(url, item, note) {
     [{ title: "Allow download" }, { title: "Discard" }]
   );
 }
-
-chrome.notifications.onButtonClicked.addListener((id, btnIdx) => {
-  const url = pendingDownloads.get(id);
-  if (!url) return;
-  pendingDownloads.delete(id);
-  chrome.notifications.clear(id);
-  if (btnIdx === 0) {
-    approvedDownloads.add(url);
-    chrome.downloads.download({ url });
-  }
-});
 chrome.notifications.onClosed.addListener((id) => pendingDownloads.delete(id));
+chrome.notifications.onClosed.addListener((id) => pendingRedirects.delete(id));
