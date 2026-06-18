@@ -26,6 +26,8 @@ const glass = $("glass");
 const stamp = $("stamp");
 const errorBox = $("error");
 const readout = $("readout");
+const numberLinks = $("numberLinks")
+
 
 // --- pdf scan elements ---
 const dropzone = $("dropzone");
@@ -43,6 +45,18 @@ const fileScanResult = $("file-scan-result");
 
 //Settings
 const historySwitch = $("historySwitch")
+
+window.onload = async function() {
+  const numberLinks = $("numberLinks");
+
+  const response = await fetch(apiBase() + "/dangerous-links");
+  const data = await response.json();
+  console.log(data)
+
+  numberLinks.textContent =
+  "Amount of dangerous links and PDFs caught: " +
+  (data.data?.[0] ?? 0);
+};
 
 function setStatus(state, text) {
   status.dataset.state = state;
@@ -103,7 +117,7 @@ async function detonate(rawUrl) {
 
       if (match) {
         spinner.classList.add("hidden");
-        render(match.data);
+        await render(match.data);
         return;
       }
     }
@@ -121,7 +135,7 @@ async function detonate(rawUrl) {
         data: cacheable,
       }),
     });
-    render(data);
+    await render(data);
   } catch (err) {
     spinner.classList.add("hidden");
     showError(
@@ -286,6 +300,14 @@ async function handlePdfFile(file) {
   try {
     const [local, server] = await Promise.all([scanPDF(file), scanPdfOnServer(file)]);
     renderScanResult(file.name, local, server);
+    if (scanResult.classList.contains("danger")) {
+      const response = await fetch(apiBase() + "/dangerous-links/add", {
+      method: "POST"
+      });
+    const result = await response.json();
+    numberLinks.textContent =
+    "Amount of dangerous links and PDFs caught: " + result.dangerousLinks;
+    }
   } finally {
     dropzone.classList.remove("scanning");
     dropzoneStatus.textContent = "Drop a PDF here or click to browse";
@@ -387,7 +409,7 @@ function showError(msg) {
   errorBox.classList.remove("hidden");
 }
 
-function render(d) {
+async function render(d) {
   console.log("render: ", d)
   setStatus("armed", "Contained");
   consoleState.textContent = "Done";
@@ -406,6 +428,18 @@ function render(d) {
 
   // verdict stamp
   const verdict = d.verdict || "safe";
+  if (verdict === "danger") {
+  const response = await fetch(apiBase() + "/dangerous-links/add", {
+    method: "POST"
+  });
+  if (!response.ok) {
+    console.error("Failed to update counter");
+    return;
+  }
+  const result = await response.json();
+  numberLinks.textContent =
+    "Amount of dangerous links and PDFs caught: " + result.dangerousLinks;
+  }
   stamp.dataset.verdict = verdict;
   stamp.innerHTML =
     verdict.toUpperCase() +

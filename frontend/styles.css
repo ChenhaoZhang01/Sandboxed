@@ -1550,6 +1550,8 @@ input:checked + .slider:before {
 }
 .phishing-ok {
   color: var(--safe);
+#numberLinks {
+  color: var(--cyan);
 }
 
 /* ---------- animations ---------- */
@@ -1576,4 +1578,4 @@ input:checked + .slider:before {
     animation: none !important;
     transition: none !important;
   }
-}
+}}
