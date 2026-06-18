@@ -26,7 +26,89 @@ const glass = $("glass");
 const stamp = $("stamp");
 const errorBox = $("error");
 const readout = $("readout");
-const numberLinks = $("numberLinks")
+const numberLinks = $("numberLinks");
+const DANGEROUS_LINKS_LABEL = "Amount of dangerous links and PDFs caught:";
+const LOCAL_DANGEROUS_LINKS_URL = "dangerousLinks.json";
+
+function extractDangerousLinkCount(payload) {
+  if (Array.isArray(payload)) {
+    return Number(payload[0] ?? 0) || 0;
+  }
+
+  if (Array.isArray(payload?.data)) {
+    return Number(payload.data[0] ?? 0) || 0;
+  }
+
+  if (typeof payload?.dangerousLinks === "number") {
+    return payload.dangerousLinks;
+  }
+
+  if (typeof payload?.count === "number") {
+    return payload.count;
+  }
+
+  return 0;
+}
+
+function setDangerousLinkCount(count) {
+  if (!numberLinks) return;
+
+  const safeCount = Number(count) || 0;
+  numberLinks.dataset.count = String(safeCount);
+  numberLinks.textContent = `${DANGEROUS_LINKS_LABEL} ${safeCount}`;
+}
+
+async function loadDangerousLinkCount() {
+  for (const source of [apiBase() + "/dangerous-links", LOCAL_DANGEROUS_LINKS_URL]) {
+    try {
+      const response = await fetch(source, { cache: "no-store" });
+      if (!response.ok) continue;
+
+      const payload = await response.json();
+      const count = extractDangerousLinkCount(payload);
+      if (count || count === 0) {
+        return count;
+      }
+    } catch (err) {
+      console.warn("failed to load dangerous links count from", source, err.message);
+    }
+  }
+
+  return 0;
+}
+
+async function refreshDangerousLinkCount() {
+  const count = await loadDangerousLinkCount();
+  setDangerousLinkCount(count);
+  return count;
+}
+
+async function bumpDangerousLinkCount() {
+  const current = Number(numberLinks?.dataset.count || 0) || 0;
+
+  try {
+    const response = await fetch(apiBase() + "/dangerous-links/add", {
+      method: "POST"
+    });
+
+    if (!response.ok) {
+      throw new Error(`Server returned ${response.status}`);
+    }
+
+    const payload = await response.json().catch(() => null);
+    const count = extractDangerousLinkCount(payload);
+    if (count > 0) {
+      setDangerousLinkCount(count);
+      return count;
+    }
+  } catch (err) {
+    console.warn("failed to update dangerous links count:", err.message);
+  }
+
+  const fallbackCount = current + 1;
+  setDangerousLinkCount(fallbackCount);
+  return fallbackCount;
+}
 
 
 // --- pdf scan elements ---
@@ -46,17 +128,9 @@ const fileScanResult = $("file-scan-result");
 //Settings
 const historySwitch = $("historySwitch")
 
-window.onload = async function() {
-  const numberLinks = $("numberLinks");
-
-  const response = await fetch(apiBase() + "/dangerous-links");
-  const data = await response.json();
-  console.log(data)
-
-  numberLinks.textContent =
-  "Amount of dangerous links and PDFs caught: " +
-  (data.data?.[0] ?? 0);
-};
+window.addEventListener("load", () => {
+  void refreshDangerousLinkCount();
+});
 
 function setStatus(state, text) {
   status.dataset.state = state;
@@ -301,12 +375,7 @@ async function handlePdfFile(file) {
     const [local, server] = await Promise.all([scanPDF(file), scanPdfOnServer(file)]);
     renderScanResult(file.name, local, server);
     if (scanResult.classList.contains("danger")) {
-      const response = await fetch(apiBase() + "/dangerous-links/add", {
-      method: "POST"
-      });
-    const result = await response.json();
-    numberLinks.textContent =
-    "Amount of dangerous links and PDFs caught: " + result.dangerousLinks;
+      await bumpDangerousLinkCount();
     }
   } finally {
     dropzone.classList.remove("scanning");
@@ -429,16 +498,7 @@ async function render(d) {
   // verdict stamp
   const verdict = d.verdict || "safe";
   if (verdict === "danger") {
-  const response = await fetch(apiBase() + "/dangerous-links/add", {
-    method: "POST"
-  });
-  if (!response.ok) {
-    console.error("Failed to update counter");
-    return;
-  }
-  const result = await response.json();
-  numberLinks.textContent =
-    "Amount of dangerous links and PDFs caught: " + result.dangerousLinks;
+    await bumpDangerousLinkCount();
   }
   stamp.dataset.verdict = verdict;
   stamp.innerHTML =
