@@ -129,10 +129,20 @@ export async function scoreRisk(report, options = {}) {
   }
   if (score < 0) score = 0;
 
+  // Strong behavioral malice (tech-support scam, wallet drainer, sandbox
+  // probing, fullscreen + blocking-dialog lockouts, etc.) is hard evidence of a
+  // hostile page in its own right. Without this, scanning any page on a shared
+  // host (e.g. all our demo decoys live on one *.vercel.app) marks the host
+  // "verified", and the trust clamp below would wrongly downgrade a malicious
+  // page to safe. The runtime threat score crossing this bar is malice we won't
+  // discount on trust.
+  const behavioralDanger = runtimeThreatSummary.score >= 35;
+
   // Hard evidence of compromise — never suppressed, even on a trusted domain
   // (covers hijacked legit sites / open redirects / subdomain takeover).
   const hardDanger =
     flaggedBySafeBrowsing ||
+    behavioralDanger ||
     (report.blockedRequests && report.blockedRequests.length > 0) ||
     (downloadsAsHardDanger && report.downloads && report.downloads.length > 0) ||
     s.crossDomainCredPost;

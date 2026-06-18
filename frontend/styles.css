@@ -23,6 +23,10 @@
 
 html {
   -webkit-text-size-adjust: 100%;
+  /* Guard against any element poking past the viewport width on phones.
+     `clip` (not `hidden`) avoids creating a scroll container, so the sticky
+     top bar keeps working. */
+  overflow-x: clip;
 }
 
 body {
@@ -99,8 +103,21 @@ a {
   letter-spacing: 0.05em;
 }
 
-.api-config {
+/* API + History controls. On desktop they sit inline at the right of the bar;
+   on phones they collapse into the gear (.settings-toggle) dropdown. */
+.settings-cluster {
   margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+.settings-toggle {
+  display: none; /* desktop: controls are always visible, no gear needed */
+  font-size: 16px;
+  line-height: 1;
+}
+
+.api-config {
   display: flex;
   align-items: center;
   gap: 8px;
@@ -142,6 +159,69 @@ a {
 @media (max-width: 880px) {
   .wrap {
     grid-template-columns: 1fr;
+  }
+}
+
+/* ---------- phone layout ---------- */
+@media (max-width: 640px) {
+  .topbar {
+    flex-wrap: wrap;
+    gap: 10px;
+    padding: 14px;
+    padding-top: max(14px, env(safe-area-inset-top));
+  }
+  /* decorative subtitle — drop it to save the row on phones */
+  .topbar .tag {
+    display: none;
+  }
+  .topbar .btn {
+    padding: 9px 11px;
+    font-size: 11px;
+    letter-spacing: 0.04em;
+  }
+
+  /* show the gear, push it to the right, and turn the cluster into a dropdown */
+  .settings-toggle {
+    display: inline-flex;
+    align-items: center;
+    margin-left: auto;
+  }
+  .settings-cluster {
+    position: absolute;
+    top: calc(100% + 6px);
+    right: 8px;
+    margin-left: 0;
+    display: none;
+    flex-direction: column;
+    align-items: stretch;
+    gap: 14px;
+    min-width: min(280px, 86vw);
+    padding: 16px;
+    background: var(--panel-2);
+    border: 1px solid var(--line-bright);
+    border-radius: var(--radius);
+    box-shadow: var(--shadow);
+    z-index: 30;
+  }
+  .settings-cluster.open {
+    display: flex;
+  }
+  .settings-cluster .api-config {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 6px;
+  }
+  .settings-cluster .api-config input {
+    width: 100%;
+    max-width: none;
+  }
+
+  .wrap {
+    padding: 20px 14px 56px;
+  }
+  /* the sticky console offset assumes the taller desktop bar */
+  .console {
+    position: static;
   }
 }
 

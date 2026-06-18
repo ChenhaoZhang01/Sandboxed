@@ -31,16 +31,20 @@
       </div>
       <span class="tag mono">URL DETONATION CHAMBER</span>
       <a href = "phishingGame.html"><button class = "btn btn-ghost">Spot the phish trainer</button></a>
-      <div class="api-config">
-        <label for="api">API</label>
-        <input id="api" spellcheck="false" />
-      </div>
-      <div>
-        <label class="switch">
-          <input type="checkbox" id="historySwitch" checked>
-          <span class="slider round"></span>
-          <span class="switch-label">History</span>
-        </label>
+      <button id="settings-toggle" class="btn btn-ghost settings-toggle" type="button"
+              aria-label="Settings" aria-expanded="false">⚙</button>
+      <div class="settings-cluster" id="settings-cluster">
+        <div class="api-config">
+          <label for="api">API</label>
+          <input id="api" spellcheck="false" />
+        </div>
+        <div>
+          <label class="switch">
+            <input type="checkbox" id="historySwitch" checked>
+            <span class="slider round"></span>
+            <span class="switch-label">History</span>
+          </label>
+        </div>
       </div>
     </header>
 
@@ -175,6 +179,7 @@
             <input type="range" id="replay-scrub" class="replay-scrub" min="0" max="0" value="0"
                    aria-label="Scrub replay" />
             <span class="mono" id="replay-time">0 / 0</span>
+            <button class="btn btn-ghost btn-sm" id="replay-result" type="button">🖼 Result</button>
           </div>
           <button class="btn btn-ghost btn-sm hidden" id="live-start" type="button">Explore live ▶</button>
           <button class="btn btn-ghost btn-sm hidden" id="live-stop" type="button">Stop live ■</button>

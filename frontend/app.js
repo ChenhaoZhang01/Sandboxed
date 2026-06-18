@@ -326,11 +326,16 @@ function render(d) {
   setStatus("armed", "Contained");
   consoleState.textContent = "Done";
 
-  // screenshot behind blast glass
+  // screenshot behind blast glass. Remember it so the replay player can always
+  // return here — the final screenshot is taken after the page settles, so it's
+  // the canonical "result" view (replay frames can end on a half-loaded page).
   if (d.screenshotBase64) {
-    shot.src = "data:image/jpeg;base64," + d.screenshotBase64;
+    finalShotSrc = "data:image/jpeg;base64," + d.screenshotBase64;
+    shot.src = finalShotSrc;
     shot.classList.remove("hidden");
     glass.classList.remove("hidden");
+  } else {
+    finalShotSrc = null;
   }
 
   // verdict stamp
@@ -356,7 +361,7 @@ function render(d) {
   renderNarrative(d.narrative);
 
   // phishing
-  renderPhishing(d.phishing);
+  renderPhishing(d.phishing, d.signals);
   renderTrap(d.credentialTrap);
   setupReplay(d.replayFrames || []);
   setupLive(d.finalUrl || d.requestedUrl || urlInput.value);
@@ -380,26 +385,41 @@ function renderNarrative(text) {
   box.classList.remove("hidden");
 }
 
-function renderPhishing(p) {
+function renderPhishing(p, signals) {
   const el = $("m-phishing");
   if (!el) return;
 
-  if (!p) {
-    el.textContent = "—";
-    el.className = "v";
-    return;
-  }
-
-  if (p.phishing) {
+  // Highest confidence: the phishing enrichment matched this page's favicon to a
+  // real brand whose domain doesn't match.
+  if (p && p.phishing) {
     el.innerHTML =
       "⚠️ Spoofing <strong>" + escapeHtml(p.spoofedBrand) + "</strong>" +
       " — real site: <a href=\"" + escapeHtml(p.expectedUrl) + "\" target=\"_blank\" rel=\"noopener\">" +
       escapeHtml(p.expectedUrl) + "</a>";
     el.className = "v phishing-warn";
-  } else {
+    return;
+  }
+
+  // Deterministic signal (always computed): the page prominently claims to be a
+  // known brand but lives on an unrelated domain.
+  const brands = (signals && signals.brandImpersonation) || [];
+  if (brands.length) {
+    el.innerHTML =
+      "⚠️ Spoofing <strong>" + escapeHtml(brands.join(", ")) + "</strong>" +
+      " — page claims to be this brand on an unrelated domain";
+    el.className = "v phishing-warn";
+    return;
+  }
+
+  // Enrichment ran and found no clone.
+  if (p) {
     el.textContent = "✓ No spoof detected";
     el.className = "v phishing-ok";
+    return;
   }
+
+  el.textContent = "—";
+  el.className = "v";
 }
 
 function renderTrajectory(chain) {
@@ -475,11 +495,13 @@ function renderTrap(t) {
 let replayFrames = [];
 let replayIdx = 0;
 let replayTimer = null;
+let finalShotSrc = null;
 const chamberTools = $("chamber-tools");
 const replayControls = $("replay-controls");
 const replayPlayBtn = $("replay-play");
 const replayScrub = $("replay-scrub");
 const replayTime = $("replay-time");
+const replayResultBtn = $("replay-result");
 
 function showFrame(i) {
   if (!replayFrames.length) return;
@@ -496,6 +518,21 @@ function stopReplay() {
   }
   replayPlayBtn.textContent = "▶ Replay";
 }
+// Return to the final screenshot — used when playback finishes and via the
+// explicit "Result" button, so the viewer is never stuck on a half-loaded
+// replay frame with no way back to the captured result.
+function restoreFinalShot() {
+  stopReplay();
+  if (finalShotSrc) {
+    shot.src = finalShotSrc;
+    shot.classList.remove("hidden");
+  }
+  if (replayFrames.length) {
+    replayIdx = replayFrames.length - 1;
+    replayScrub.value = String(replayIdx);
+    replayTime.textContent = "result";
+  }
+}
 function playReplay() {
   if (replayTimer) {
     stopReplay();
@@ -505,7 +542,9 @@ function playReplay() {
   replayPlayBtn.textContent = "⏸ Pause";
   replayTimer = setInterval(() => {
     if (replayIdx >= replayFrames.length - 1) {
-      stopReplay();
+      // Land on the canonical final screenshot, not the last (possibly
+      // still-loading) frame.
+      restoreFinalShot();
       return;
     }
     showFrame(replayIdx + 1);
@@ -530,6 +569,7 @@ replayScrub.addEventListener("input", () => {
   stopReplay();
   showFrame(Number(replayScrub.value));
 });
+if (replayResultBtn) replayResultBtn.addEventListener("click", restoreFinalShot);
 
 // ---------- live interactive sandbox ----------
 const liveCanvas = $("live-canvas");
@@ -702,6 +742,29 @@ function escapeHtml(s) {
   return String(s).replace(/[&<>"']/g, (c) =>
     ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c])
   );
+}
+
+// --- mobile settings dropdown (gear is only visible on phones via CSS) ---
+const settingsToggle = $("settings-toggle");
+const settingsCluster = $("settings-cluster");
+if (settingsToggle && settingsCluster) {
+  const closeSettings = () => {
+    settingsCluster.classList.remove("open");
+    settingsToggle.setAttribute("aria-expanded", "false");
+  };
+  settingsToggle.addEventListener("click", (e) => {
+    e.stopPropagation();
+    const open = settingsCluster.classList.toggle("open");
+    settingsToggle.setAttribute("aria-expanded", open ? "true" : "false");
+  });
+  document.addEventListener("click", (e) => {
+    if (!settingsCluster.classList.contains("open")) return;
+    if (settingsCluster.contains(e.target) || settingsToggle.contains(e.target)) return;
+    closeSettings();
+  });
+  document.addEventListener("keydown", (e) => {
+    if (e.key === "Escape") closeSettings();
+  });
 }
 
 // --- events ---
