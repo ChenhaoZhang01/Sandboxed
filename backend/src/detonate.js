@@ -6,6 +6,8 @@ import { makeCanary, fillCredentialForm, matchCanaryHit } from "./credentialTrap
 const DETONATE_TIMEOUT_MS = Number(process.env.DETONATE_TIMEOUT_MS || 30000);
 const MAX_REDIRECTS = Number(process.env.MAX_REDIRECTS || 15);
 const SCREENSHOT_DELAY_MS = Number(process.env.SCREENSHOT_DELAY_MS || 1500);
+const PAGE_SETTLE_TIMEOUT_MS = Number(process.env.PAGE_SETTLE_TIMEOUT_MS || 8000);
+const PAGE_IDLE_TIME_MS = Number(process.env.PAGE_IDLE_TIME_MS || 1500);
 // Recorded-replay screencast tuning + how long to wait for the canary submission.
 const REPLAY_MAX_FRAMES = Number(process.env.REPLAY_MAX_FRAMES || 30);
 const CREDENTIAL_TRAP_WAIT_MS = Number(process.env.CREDENTIAL_TRAP_WAIT_MS || 3000);
@@ -265,6 +267,27 @@ async function installThreatHooks(page) {
   });
 }
 
+async function waitForPageSettle(page) {
+  const waits = [
+    page
+      .waitForFunction(() => document.readyState === "complete", {
+        timeout: PAGE_SETTLE_TIMEOUT_MS,
+        polling: 250,
+      })
+      .catch(() => {}),
+  ];
+
+  if (typeof page.waitForNetworkIdle === "function") {
+    waits.push(
+      page
+        .waitForNetworkIdle({ idleTime: PAGE_IDLE_TIME_MS, timeout: PAGE_SETTLE_TIMEOUT_MS })
+        .catch(() => {})
+    );
+  }
+
+  await Promise.all(waits);
+}
+
 /**
  * Detonate a URL: open it in an isolated browser context, follow the full
  * redirect chain, screenshot the landing page, and extract behavioral signals.
@@ -417,6 +440,12 @@ export async function detonate(targetUrl, options = {}) {
 
     const finalUrl = page.url();
 
+    emitProgress("settling", "waiting for page to settle");
+    await waitForPageSettle(page);
+    if (SCREENSHOT_DELAY_MS > 0) {
+      await new Promise((resolve) => setTimeout(resolve, SCREENSHOT_DELAY_MS));
+    }
+
     emitProgress("extracting", "extracting page signals");
     const pageMeta = await extractPageData(page);
     const runtimeSignals = await collectRuntimeSignals(page);
@@ -431,12 +460,9 @@ export async function detonate(targetUrl, options = {}) {
       typosquat: detectTyposquat(new URL(finalUrl).hostname || ""),
     };
 
-    // Give heavy / animated pages a brief moment to settle before capturing
-    // the final screenshot (helps with loading-overlay pages like x.com).
+    // The page should already be settled before we extract signals and capture
+    // the final screenshot.
     emitProgress("screenshotting", "screenshotting");
-    if (SCREENSHOT_DELAY_MS > 0) {
-      await new Promise((resolve) => setTimeout(resolve, SCREENSHOT_DELAY_MS));
-    }
 
     let screenshot = null;
     try {

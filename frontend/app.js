@@ -157,12 +157,14 @@ function resetView() {
   teardownExtras();
 }
 
-function normalize(u) {
+function normalizeHistoryUrl(rawUrl) {
   try {
-    const url = new URL(u.includes("://") ? u : "http://" + u);
-    return url.hostname.replace(/^www\./, "");
+    const url = new URL(rawUrl.includes("://") ? rawUrl : "http://" + rawUrl);
+    url.hostname = url.hostname.replace(/^www\./, "");
+    url.hash = "";
+    return url.toString();
   } catch {
-    return u.replace(/^https?:\/\//, "").replace(/\/$/, "");
+    return String(rawUrl || "").trim().replace(/^www\./i, "");
   }
 }
 async function detonate(rawUrl) {
@@ -186,7 +188,7 @@ async function detonate(rawUrl) {
         console.warn("failed to load scan history:", err.message);
       }
       const match = verifiedLinks.find(
-        (x) => normalize(x.url) === normalize(url)
+        (x) => normalizeHistoryUrl(x.url) === normalizeHistoryUrl(url)
       );
 
       if (match) {
@@ -205,7 +207,7 @@ async function detonate(rawUrl) {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        url,
+        url: normalizeHistoryUrl(url),
         data: cacheable,
       }),
     });

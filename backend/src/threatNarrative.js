@@ -24,7 +24,11 @@ const SYSTEM_PROMPT =
   "what this link is and what it would do to a victim who clicked it on their own " +
   "device. Be concrete and specific: name the brand it impersonates, how many " +
   "redirects it bounces through, and where a typed password would actually be sent. " +
-  "Do not hedge. End with a one-line bottom line on whether to trust it. " +
+  "If the analysis shows brand impersonation, phishing detection, cross-domain " +
+  "credential submission, auto-downloads, or blocked/private-address behavior, " +
+  "treat it as malicious or suspicious even if the host was previously verified. " +
+  "Do not call it safe just because it is a known host or because no password theft " +
+  "was captured. End with a one-line bottom line on whether to trust it. " +
   "Respond with only the explanation: no preamble, no markdown, no reasoning.";
 
 /**

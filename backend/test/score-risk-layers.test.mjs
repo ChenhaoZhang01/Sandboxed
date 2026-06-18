@@ -34,3 +34,41 @@ test("scoreRisk skips optional intelligence layers when disabled", async () => {
     global.fetch = originalFetch;
   }
 });
+
+test("scoreRisk does not let trusted hosts suppress impersonation evidence", async () => {
+  const originalFetch = global.fetch;
+  const fetchMock = mock.method(globalThis, "fetch", async () => {
+    throw new Error("fetch should not be called when optional layers are disabled");
+  });
+
+  try {
+    const result = await scoreRisk(
+      {
+        requestedUrl: "https://google.com.fake.example",
+        finalUrl: "https://google.com.fake.example",
+        signals: {
+          finalHost: "google.com",
+          brandImpersonation: ["IRS"],
+        },
+        phishing: {
+          phishing: true,
+          spoofedBrand: "IRS",
+        },
+      },
+      {
+        analysisLayers: {
+          domainAge: false,
+          safeBrowsing: false,
+        },
+      }
+    );
+
+    assert.equal(result.verdict, "dangerous");
+    assert.ok(result.score >= 60);
+    assert.ok(result.reasons.some((item) => /impersonation/i.test(item.reason)));
+    assert.ok(result.reasons.some((item) => /phishing detector matched/i.test(item.reason)));
+  } finally {
+    fetchMock.mock.restore();
+    global.fetch = originalFetch;
+  }
+});

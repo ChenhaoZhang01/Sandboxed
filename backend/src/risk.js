@@ -30,6 +30,7 @@ export async function scoreRisk(report, options = {}) {
 
   const s = report.signals || {};
   const host = s.finalHost || "";
+  const phishingSpoofedBrand = report.phishing && report.phishing.phishing === true;
   const runtimeThreatSummary = classifySignalThreats(s);
 
   score += runtimeThreatSummary.score;
@@ -145,7 +146,9 @@ export async function scoreRisk(report, options = {}) {
     behavioralDanger ||
     (report.blockedRequests && report.blockedRequests.length > 0) ||
     (downloadsAsHardDanger && report.downloads && report.downloads.length > 0) ||
-    s.crossDomainCredPost;
+    s.crossDomainCredPost ||
+    (s.brandImpersonation && s.brandImpersonation.length > 0) ||
+    phishingSpoofedBrand;
 
   // #1 allowlist + #2 user-verified: strong trust → clamp the verdict to safe
   // (unless hard danger above), discounting the benign login/redirect signals.
@@ -160,6 +163,11 @@ export async function scoreRisk(report, options = {}) {
       points: 0,
       reason: `Common-sense check: ${why}; benign login/redirect signals discounted`,
     });
+  }
+
+  if (phishingSpoofedBrand) {
+    const spoofedBrand = report.phishing.spoofedBrand || "a known brand";
+    add(35, `Brand impersonation detected: phishing detector matched ${spoofedBrand} while the domain does not match`);
   }
 
   const verdict =

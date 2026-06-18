@@ -166,18 +166,20 @@ async function handleConnection(ws, req) {
 
     send(ws, { type: "ready", viewport: VIEWPORT });
     await client.send("Page.enable").catch(() => {});
-    await client.send("Page.startScreencast", {
-      format: "jpeg",
-      quality: 60,
-      maxWidth: VIEWPORT.width,
-      maxHeight: VIEWPORT.height,
-      everyNthFrame: 1,
-    });
 
     page
       .goto(url, { waitUntil: "domcontentloaded", timeout: 30000 })
       .then(() => send(ws, { type: "nav", url: page.url() }))
-      .catch(() => send(ws, { type: "nav", url: page.url() }));
+      .catch(() => send(ws, { type: "nav", url: page.url() }))
+      .finally(async () => {
+        await client.send("Page.startScreencast", {
+          format: "jpeg",
+          quality: 45,
+          maxWidth: 1024,
+          maxHeight: 640,
+          everyNthFrame: 2,
+        }).catch(() => {});
+      });
   } catch (err) {
     send(ws, { type: "error", message: "Could not open the page" });
     await closeSession();
