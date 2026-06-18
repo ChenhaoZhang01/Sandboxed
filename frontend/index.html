@@ -97,6 +97,11 @@
               <span class="slider round"></span>
               <span class="switch-label"><b>Live explore</b> — open the sandbox &amp; click through it live</span>
             </label>
+            <label class="switch switch-sm">
+              <input type="checkbox" id="narrativeSwitch">
+              <span class="slider round"></span>
+              <span class="switch-label"><b>AI threat report</b> — plain-English summary of what the link does</span>
+            </label>
           </div>
 
           <div id="qr-reader"></div>
@@ -179,6 +184,11 @@
         <div class="error-box hidden" id="error"></div>
 
         <div class="readout hidden" id="readout">
+          <div class="narrative hidden" id="narrative">
+            <span class="narrative-label">AI threat report</span>
+            <p class="narrative-body" id="narrative-body"></p>
+          </div>
+
           <div class="readout-grid">
             <div class="meta">
               <div class="k">Final destination</div>

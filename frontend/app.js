@@ -133,6 +133,7 @@ function currentAnalysisLayers() {
     phishingEnrichment: $("phishingSwitch").checked,
     recordReplay: $("replaySwitch").checked,
     credentialTrap: $("trapSwitch").checked,
+    aiNarrative: $("narrativeSwitch").checked,
   };
 }
 
@@ -347,6 +348,9 @@ function render(d) {
     (d.redirectCount ?? 0) + (d.redirectCount === 1 ? " hop" : " hops");
   $("m-title").textContent = d.title || "—";
 
+  // AI threat report
+  renderNarrative(d.narrative);
+
   // phishing
   renderPhishing(d.phishing);
   renderTrap(d.credentialTrap);
@@ -357,6 +361,19 @@ function render(d) {
   renderReasons(d.reasons || []);
 
   readout.classList.remove("hidden");
+}
+
+function renderNarrative(text) {
+  const box = $("narrative");
+  const body = $("narrative-body");
+  if (!box || !body) return;
+  if (!text) {
+    box.classList.add("hidden");
+    body.textContent = "";
+    return;
+  }
+  body.textContent = text;
+  box.classList.remove("hidden");
 }
 
 function renderPhishing(p) {

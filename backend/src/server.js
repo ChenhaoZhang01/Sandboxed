@@ -7,6 +7,7 @@ import { isBlockedUrl } from "./ssrf.js";
 import { runWithTimeout } from "./timeouts.js";
 import { scanBuffer } from "./pdfScan.js";
 import { checkForPhishing } from "../tools/phishing-detect.js";
+import { explainThreat } from "./threatNarrative.js";
 import { closeSearchBrowser } from "../tools/brand-search.js";
 import { attachLiveServer, closeLiveSessions } from "./live.js";
 import { readFile, writeFile } from 'fs/promises';
@@ -20,6 +21,7 @@ const __dirname = path.dirname(__filename);
 const app = express();
 const PORT = Number(process.env.PORT || 8787);
 const PHISHING_ENRICHMENT_TIMEOUT_MS = Number(process.env.PHISHING_ENRICHMENT_TIMEOUT_MS || 10000);
+const NARRATIVE_TIMEOUT_MS = Number(process.env.NARRATIVE_TIMEOUT_MS || 20000);
 
 function resolveAnalysisLayers(input = {}) {
   return {
@@ -33,6 +35,8 @@ function resolveAnalysisLayers(input = {}) {
     recordReplay: input.recordReplay !== false,
     // Auto-fill canary creds + trap the credential POST (opt-in: it submits forms).
     credentialTrap: input.credentialTrap === true,
+    // AI plain-English threat narrative (opt-in: needs ANTHROPIC_API_KEY + costs tokens).
+    aiNarrative: input.aiNarrative === true,
   };
 }
 
@@ -250,6 +254,7 @@ function parseAnalysisLayersQuery(query) {
     "downloadsAsHardDanger",
     "recordReplay",
     "credentialTrap",
+    "aiNarrative",
   ]) {
     const value = parseBoolean(query[key]);
     if (typeof value === "boolean") parsed[key] = value;
@@ -327,6 +332,19 @@ async function runDetonation(raw, analysisLayerInput, onProgress) {
     elapsedMs: Date.now() - started,
     phishing,
   };
+
+  // AI threat narrative: derives from the assembled result above, so it runs
+  // last. Best-effort + time-bounded — a failure leaves `narrative` null and
+  // never fails the detonation.
+  if (analysisLayers.aiNarrative) {
+    emitProgress(onProgress, "narrating", "writing threat narrative");
+    result.narrative = await runWithTimeout(explainThreat(result), NARRATIVE_TIMEOUT_MS, null).catch(
+      (err) => {
+        console.error("narrative failed (non-fatal):", err.message || err);
+        return null;
+      }
+    );
+  }
 
   emitProgress(onProgress, "complete", "complete", {
     verdict: result.verdict,
