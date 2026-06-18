@@ -36,15 +36,17 @@ async function getClamscan() {
 
 /**
  * @param {Buffer} buffer
+ * @param {string} [ext] temp-file extension (ClamAV scans content regardless; this
+ *   only affects the throwaway temp filename). Defaults to ".bin".
  * @returns {Promise<{status: "clean"|"infected"|"unavailable"|"error", viruses?: string[], message?: string}>}
  */
-export async function scanBuffer(buffer) {
+export async function scanBuffer(buffer, ext = ".bin") {
   const clamscan = await getClamscan();
   if (!clamscan) {
     return { status: "unavailable", message: "ClamAV daemon is not reachable." };
   }
 
-  const tempPath = path.join(tmpdir(), `sandboxer-${randomUUID()}.pdf`);
+  const tempPath = path.join(tmpdir(), `sandboxer-${randomUUID()}${ext}`);
   try {
     await writeFile(tempPath, buffer);
     const { isInfected, viruses } = await clamscan.isInfected(tempPath);

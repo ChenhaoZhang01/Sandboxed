@@ -147,6 +147,24 @@
             </p>
             <div class="scan-result hidden" id="scan-result"></div>
           </div>
+
+          <div class="dropzone-section">
+            <span class="field-label">Scan a downloaded file</span>
+            <div class="dropzone" id="file-dropzone" tabindex="0" role="button" aria-label="Drop a file here or click to browse for a file">
+              <div class="ring"></div>
+              <p>
+                Drop any file here or
+                <button type="button" id="file-browse-btn" class="dropzone-browse">browse</button>
+              </p>
+              <p class="dropzone-status mono" id="file-dropzone-status">Drop a file here or click to browse</p>
+              <input type="file" id="file-input" hidden />
+            </div>
+            <p class="hint">
+              Sends the file to the server for a real ClamAV scan — handy for
+              checking a download before you open it.
+            </p>
+            <div class="scan-result hidden" id="file-scan-result"></div>
+          </div>
         </div>
       </section>
 

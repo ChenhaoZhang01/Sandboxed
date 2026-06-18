@@ -211,9 +211,35 @@ app.post(
     }
 
     try {
-      res.json(await scanBuffer(req.body));
+      res.json(await scanBuffer(req.body, ".pdf"));
     } catch (err) {
       console.error("scan-pdf failed:", err);
+      res.status(500).json({ status: "error", message: String(err.message || err) });
+    }
+  }
+);
+
+const FILE_SCAN_LIMIT = `${Number(process.env.FILE_SCAN_MAX_MB || 50)}mb`;
+
+/**
+ * POST /scan-file
+ * Body: raw file bytes, any Content-Type. The download-guard / file-checker path —
+ * no format check (unlike /scan-pdf), just a real ClamAV scan of the bytes.
+ * ClamAV being unreachable is not a request error (responds 200 with a status field);
+ * only empty input is a 4xx.
+ */
+app.post(
+  "/scan-file",
+  express.raw({ type: () => true, limit: FILE_SCAN_LIMIT }),
+  async (req, res) => {
+    if (!Buffer.isBuffer(req.body) || req.body.length === 0) {
+      return res.status(400).json({ error: "Provide raw file bytes in the request body" });
+    }
+
+    try {
+      res.json(await scanBuffer(req.body));
+    } catch (err) {
+      console.error("scan-file failed:", err);
       res.status(500).json({ status: "error", message: String(err.message || err) });
     }
   }
@@ -412,6 +438,7 @@ const server = app.listen(PORT, () => {
   console.log(`Sandboxed detonation engine listening on http://localhost:${PORT}`);
   console.log(`  POST /detonate { "url": "..." }`);
   console.log(`  POST /scan-pdf  (raw PDF bytes, Content-Type: application/pdf)`);
+  console.log(`  POST /scan-file (raw file bytes, any Content-Type)`);
   console.log(`  WS   /live?url=...  (live interactive sandbox)`);
 });
 

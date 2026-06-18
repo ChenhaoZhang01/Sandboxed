@@ -23,6 +23,15 @@
         <button id="tab" class="btn btn-ghost" type="button">This tab</button>
       </div>
       <div id="result"></div>
+
+      <div class="dropzone" id="fileDropzone" tabindex="0" role="button"
+           aria-label="Drop a file here or click to browse">
+        <p>Drop a file to scan, or <button type="button" id="fileBrowse" class="dropzone-browse">browse</button></p>
+        <p class="dropzone-status mono" id="fileStatus">ClamAV download / file checker</p>
+        <input type="file" id="fileInput" hidden />
+      </div>
+      <div class="scan-result" id="fileScan" hidden></div>
+
       <div class="mode-line" id="modeLine"></div>
     </div>
     <script src="core.js"></script>

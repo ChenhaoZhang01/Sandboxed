@@ -17,6 +17,14 @@ const SBX = (() => {
       credentialTrap: false,
     },
     historyEnabled: true,
+    // Block script-driven redirects / popunders (e.g. istreameast). Opt-in.
+    // action: "scan" = detonate the destination + show verdict window;
+    //         "prompt" = just block and show a notification.
+    redirectBlock: { enabled: false, action: "scan" },
+    // Intercept downloads. Opt-in.
+    // scope: "all" = every download; "driveby" = only without a recent user gesture.
+    // scan: ClamAV-scan the bytes before letting it through.
+    downloadGuard: { enabled: false, scope: "all", scan: true },
   };
 
   // --- settings (persist across browser restarts via chrome.storage.sync) ---
@@ -31,6 +39,21 @@ const SBX = (() => {
     };
   }
 
+  function normalizeRedirectBlock(rb = {}) {
+    return {
+      enabled: rb.enabled === true,
+      action: rb.action === "prompt" ? "prompt" : "scan",
+    };
+  }
+
+  function normalizeDownloadGuard(dg = {}) {
+    return {
+      enabled: dg.enabled === true,
+      scope: dg.scope === "driveby" ? "driveby" : "all",
+      scan: dg.scan !== false,
+    };
+  }
+
   function getSettings() {
     return new Promise((resolve) =>
       chrome.storage.sync.get(DEFAULTS, (o) =>
@@ -39,6 +62,8 @@ const SBX = (() => {
           checkMode: o.checkMode || DEFAULTS.checkMode,
           historyEnabled: o.historyEnabled ?? true,
           analysisLayers: normalizeAnalysisLayers(o.analysisLayers),
+          redirectBlock: normalizeRedirectBlock(o.redirectBlock),
+          downloadGuard: normalizeDownloadGuard(o.downloadGuard),
         })
       )
     );

@@ -119,6 +119,68 @@
         Toggle layers to control scan depth and performance.
       </p>
 
+      <!-- REDIRECT BLOCKER -->
+      <label class="opt-field">Redirect blocker</label>
+
+      <div class="toggle-list">
+        <label class="switch-row">
+          <span class="switch-label">
+            <b>Block redirects &amp; popunders</b> — stop pages from forcing you elsewhere
+          </span>
+          <label class="switch">
+            <input type="checkbox" id="redirect-enabled" />
+            <span class="slider round"></span>
+          </label>
+        </label>
+      </div>
+
+      <div class="modes">
+        <label class="mode-opt">
+          <input type="radio" name="redirectAction" value="scan" />
+          <span><b>Scan &amp; verdict</b> — detonate the destination first</span>
+        </label>
+        <label class="mode-opt">
+          <input type="radio" name="redirectAction" value="prompt" />
+          <span><b>Block &amp; notify</b> — just stop it</span>
+        </label>
+      </div>
+
+      <!-- DOWNLOAD GUARD -->
+      <label class="opt-field">Download guard</label>
+
+      <div class="toggle-list">
+        <label class="switch-row">
+          <span class="switch-label">
+            <b>Block downloads</b> — hold downloads for review
+          </span>
+          <label class="switch">
+            <input type="checkbox" id="download-enabled" />
+            <span class="slider round"></span>
+          </label>
+        </label>
+
+        <label class="switch-row">
+          <span class="switch-label">
+            <b>Scan with ClamAV</b> — check the file before letting it through
+          </span>
+          <label class="switch">
+            <input type="checkbox" id="download-scan" />
+            <span class="slider round"></span>
+          </label>
+        </label>
+      </div>
+
+      <div class="modes">
+        <label class="mode-opt">
+          <input type="radio" name="downloadScope" value="all" />
+          <span><b>All downloads</b></span>
+        </label>
+        <label class="mode-opt">
+          <input type="radio" name="downloadScope" value="driveby" />
+          <span><b>Drive-by only</b> — auto-started downloads</span>
+        </label>
+      </div>
+
       <!-- SAVE -->
       <div class="actions">
         <button id="save" class="btn btn-primary">Save</button>

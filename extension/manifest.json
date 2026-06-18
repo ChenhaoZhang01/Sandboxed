@@ -1,9 +1,9 @@
 {
   "manifest_version": 3,
   "name": "Sandboxed — Link Detonator",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "Check links in a sandbox before you visit them — automatically on click, or manually via right-click — and see a risk verdict.",
-  "permissions": ["contextMenus", "storage", "tabs"],
+  "permissions": ["contextMenus", "storage", "tabs", "webNavigation", "downloads", "notifications"],
   "host_permissions": ["<all_urls>"],
   "background": {
     "service_worker": "background.js"
