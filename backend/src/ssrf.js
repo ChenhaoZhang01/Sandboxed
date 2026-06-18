@@ -3,6 +3,9 @@
 // reach internal services, cloud metadata (169.254.169.254), or loopback.
 import dns from "node:dns";
 import ipaddr from "ipaddr.js";
+import { runWithTimeout } from "./timeouts.js";
+
+const DNS_LOOKUP_TIMEOUT_MS = Number(process.env.DNS_LOOKUP_TIMEOUT_MS || 2500);
 
 // TEST-ONLY escape hatch so the offline fixture (served on 127.0.0.1) can run.
 // NEVER set this in a deployed/public environment. Read at call-time so tests
@@ -49,6 +52,50 @@ function hostFromUrl(rawUrl) {
   return { host };
 }
 
+async function resolveHostnameState(host, timeoutMs) {
+  try {
+    const addrs = await runWithTimeout(
+      dns.promises.lookup(host, { all: true }),
+      timeoutMs,
+      "timeout"
+    );
+
+    if (addrs === "timeout") {
+      return { blocked: true, reason: "unresolvable", detail: "timeout" };
+    }
+    if (!Array.isArray(addrs) || addrs.length === 0) {
+      return { blocked: true, reason: "unresolvable", detail: "empty" };
+    }
+    if (addrs.some((a) => ipIsBlocked(a.address))) {
+      return { blocked: true, reason: "private" };
+    }
+    return { blocked: false, reason: "public" };
+  } catch (err) {
+    return {
+      blocked: true,
+      reason: "unresolvable",
+      detail: err?.code || err?.message || "lookup-failed",
+    };
+  }
+}
+
+export async function resolvePublicUrlState(rawUrl, options = {}) {
+  if (allowPrivate()) return { blocked: false, reason: "public" };
+
+  const { host, nonHttp, error } = hostFromUrl(rawUrl);
+  if (error || !host) return { blocked: true, reason: "invalid" };
+  if (nonHttp) return { blocked: false, reason: "nonHttp" };
+
+  if (ipaddr.isValid(host)) {
+    return ipIsBlocked(host) ? { blocked: true, reason: "private" } : { blocked: false, reason: "public" };
+  }
+  if (host === "localhost" || host.endsWith(".localhost")) {
+    return { blocked: true, reason: "private" };
+  }
+
+  return resolveHostnameState(host, Number(options.lookupTimeoutMs || DNS_LOOKUP_TIMEOUT_MS));
+}
+
 /**
  * Cheap, synchronous check usable on every (sub)resource request: blocks the
  * request only if the host is a *literal* IP in a non-public range. Does not
@@ -70,21 +117,6 @@ export function isBlockedLiteral(rawUrl) {
  * redirects to internal/metadata endpoints.
  */
 export async function isBlockedUrl(rawUrl) {
-  if (allowPrivate()) return false;
-  const { host, nonHttp, error } = hostFromUrl(rawUrl);
-  if (error) return true;
-  if (nonHttp) return false;
-  if (!host) return true;
-
-  if (ipaddr.isValid(host)) return ipIsBlocked(host);
-  if (host === "localhost" || host.endsWith(".localhost")) return true;
-
-  let addrs;
-  try {
-    addrs = await dns.promises.lookup(host, { all: true });
-  } catch {
-    return true; // unresolvable → deny
-  }
-  if (!addrs.length) return true;
-  return addrs.some((a) => ipIsBlocked(a.address));
+  const state = await resolvePublicUrlState(rawUrl);
+  return state.blocked;
 }

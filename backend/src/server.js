@@ -3,7 +3,7 @@ import express from "express";
 import cors from "cors";
 import { detonate, closeBrowser } from "./detonate.js";
 import { scoreRisk } from "./risk.js";
-import { isBlockedUrl } from "./ssrf.js";
+import { isBlockedUrl, resolvePublicUrlState } from "./ssrf.js";
 import { runWithTimeout } from "./timeouts.js";
 import { scanBuffer } from "./pdfScan.js";
 import { checkForPhishing } from "../tools/phishing-detect.js";
@@ -472,7 +472,13 @@ async function resolveTarget(input) {
   // Pre-flight SSRF check: resolves DNS + canonicalizes IP forms and rejects
   // anything that isn't a public unicast address. Redirect hops are re-checked
   // inside the detonation engine (see detonate.js).
-  if (await isBlockedUrl(u.toString())) return null;
+  const targetState = await resolvePublicUrlState(u.toString());
+  if (targetState.blocked) {
+    if (targetState.reason === "unresolvable") {
+      throw requestError("That link does not exist or could not be resolved.");
+    }
+    return null;
+  }
   return u.toString();
 }
 
