@@ -17,6 +17,12 @@
 
 * { box-sizing: border-box; }
 
+/* Hidden elements. The result renderer always appends a live-explore canvas
+   (class "live-canvas hidden") to the chamber; without this rule that opaque
+   black canvas (z-index above the screenshot) covers the result — a black
+   box after every scan. !important so it always wins over .live-canvas etc. */
+.hidden { display: none !important; }
+
 body {
   margin: 0;
   background: var(--bg);

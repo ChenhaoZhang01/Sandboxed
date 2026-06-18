@@ -32,4 +32,7 @@ primary_region = 'sjc'
 
 [[vm]]
   size = 'shared-cpu-1x'
-  memory = '1gb'
+  # ClamAV's clamd loads the full signature DB into memory (~1.2–1.5 GB). On a
+  # 1 GB VM it gets OOM-killed, the clamd TCP socket dies, and /scan-file fails
+  # with "Could not scan file via TCP or locally". 2 GB gives clamd headroom.
+  memory = '2gb'
