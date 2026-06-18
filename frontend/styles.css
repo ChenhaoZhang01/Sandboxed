@@ -103,6 +103,25 @@ a {
   letter-spacing: 0.05em;
 }
 
+/* Cross-links back to the marketing site. The app is served at /app/ on the
+   same origin, so these absolute paths resolve to the landing pages. */
+.site-nav {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+.site-nav a {
+  color: var(--ink-faint);
+  font-size: 12px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  text-decoration: none;
+  transition: color 0.15s;
+}
+.site-nav a:hover {
+  color: var(--cyan);
+}
+
 /* API + History controls. On desktop they sit inline at the right of the bar;
    on phones they collapse into the gear (.settings-toggle) dropdown. */
 .settings-cluster {
@@ -178,6 +197,16 @@ a {
     padding: 9px 11px;
     font-size: 11px;
     letter-spacing: 0.04em;
+  }
+  /* let the site links wrap onto their own row instead of crowding the bar */
+  .site-nav {
+    flex-wrap: wrap;
+    gap: 12px 14px;
+    width: 100%;
+    order: 5;
+  }
+  .site-nav a {
+    font-size: 11px;
   }
 
   /* show the gear, push it to the right, and turn the cluster into a dropdown */
