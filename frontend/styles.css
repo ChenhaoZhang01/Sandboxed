@@ -273,17 +273,9 @@ a {
 }
 
 /* ---------- console ---------- */
-/* Sticky only in the two-column desktop layout. Below 880px the console stacks
-   above the results panel; pinning it there makes the results slide up and
-   paint over it. (This is min-width-scoped instead of overridden in a media
-   query because the base .console rule sits later in the file and would win on
-   source order.) */
-@media (min-width: 881px) {
-  .console {
-    position: sticky;
-    top: 92px;
-  }
-}
+/* The console is NOT sticky. It's taller than most viewports, so pinning it
+   gave no real benefit and made the results panel scroll up over it. Plain
+   static = everything scrolls normally at every width. */
 .console .body {
   padding: 20px 18px 22px;
 }
