@@ -1,4 +1,5 @@
 import { writeFile, unlink } from "node:fs/promises";
+import { existsSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { randomUUID } from "node:crypto";
 import path from "node:path";
@@ -10,8 +11,16 @@ const CLAMD_PORT = Number(process.env.CLAMD_PORT || 3310);
 const CLAM_INIT_TIMEOUT_MS = Number(process.env.CLAM_INIT_TIMEOUT_MS || 5000);
 
 let clamscanPromise = null;
+let clamdInitWarned = false;
+
+function hasClamdEndpoint() {
+  return !!CLAMD_HOST || existsSync(CLAMD_SOCKET);
+}
 
 async function getClamscan() {
+  if (!hasClamdEndpoint()) {
+    return null;
+  }
   if (!clamscanPromise) {
     clamscanPromise = new NodeClam()
       .init({
@@ -26,7 +35,10 @@ async function getClamscan() {
         preference: "clamdscan",
       })
       .catch((err) => {
-        console.error("ClamAV init failed (scanning will be unavailable):", err.message || err);
+        if (!clamdInitWarned) {
+          console.warn("ClamAV unavailable (scanning will be unavailable):", err.message || err);
+          clamdInitWarned = true;
+        }
         clamscanPromise = null; // allow retry on a later call once clamd is back
         return null;
       });
