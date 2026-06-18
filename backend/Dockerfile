@@ -17,6 +17,11 @@ RUN apt-get update \
     && freshclam --stdout || true \
     && rm -rf /var/lib/apt/lists/*
 
+# clamd and the runtime freshclam fallback (see docker-entrypoint.sh) run as the
+# non-root pptruser, so the signature DB dir must be writable by it.
+RUN mkdir -p /var/lib/clamav /run/clamav \
+    && chown -R pptruser:pptruser /var/lib/clamav /run/clamav
+
 WORKDIR /app
 
 # Don't re-download Chromium; the image already ships it in Puppeteer's cache

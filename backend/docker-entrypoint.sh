@@ -20,6 +20,10 @@ if [ -x "$CLAMD_BIN" ]; then
     -e 's|^#\?TCPSocket .*|TCPSocket '"$CLAMD_PORT"'|' \
     -e 's|^#\?TCPAddr .*|TCPAddr '"$CLAMD_HOST"'|' \
     -e 's|^#\?User .*|User pptruser|' \
+    -e 's|^#\?LocalSocket .*|LocalSocket /tmp/clamd.ctl|' \
+    -e 's|^#\?PidFile .*|PidFile /tmp/clamd.pid|' \
+    -e 's|^#\?TemporaryDirectory .*|TemporaryDirectory /tmp|' \
+    -e 's|^#\?ConcurrentDatabaseReload .*|ConcurrentDatabaseReload no|' \
     "$CLAMD_CONF"
 
   if ! grep -q '^TCPSocket ' "$CLAMD_CONF"; then
@@ -30,6 +34,20 @@ if [ -x "$CLAMD_BIN" ]; then
   fi
   if ! grep -q '^User ' "$CLAMD_CONF"; then
     echo "User pptruser" >> "$CLAMD_CONF"
+  fi
+  # Loading a second copy of the DB during a reload nearly doubles clamd's RAM;
+  # disable it so a memory-constrained VM doesn't OOM the daemon mid-reload.
+  if ! grep -q '^ConcurrentDatabaseReload ' "$CLAMD_CONF"; then
+    echo "ConcurrentDatabaseReload no" >> "$CLAMD_CONF"
+  fi
+
+  # The build-time freshclam uses "|| true", so a failed download (network /
+  # rate-limit) silently ships an image with NO signature database. clamd then
+  # refuses to start and every scan reports "Could not scan via TCP or locally".
+  # Fetch the DB now if it's missing so the container is self-healing.
+  if ! ls /var/lib/clamav/*.cvd /var/lib/clamav/*.cld >/dev/null 2>&1; then
+    echo "No ClamAV signature database found; running freshclam..." >&2
+    freshclam --stdout || echo "freshclam failed; scanning may be unavailable" >&2
   fi
 
   "$CLAMD_BIN" --config-file="$CLAMD_CONF" &
