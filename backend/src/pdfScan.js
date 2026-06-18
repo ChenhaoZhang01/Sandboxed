@@ -10,12 +10,13 @@ const CLAMD_HOST = process.env.CLAMD_HOST || "";
 const CLAMD_PORT = Number(process.env.CLAMD_PORT || 3310);
 const CLAM_INIT_TIMEOUT_MS = Number(process.env.CLAM_INIT_TIMEOUT_MS || 5000);
 const CLAMSCAN_BIN = process.env.CLAMSCAN_BIN || "/usr/bin/clamscan";
+const CLAMSCAN_LOCAL_FALLBACK = process.env.CLAMSCAN_LOCAL_FALLBACK === "1";
 
 let clamscanPromise = null;
 let clamdInitWarned = false;
 
 function hasScannerBackend() {
-  return !!CLAMD_HOST || existsSync(CLAMD_SOCKET) || existsSync(CLAMSCAN_BIN);
+  return !!CLAMD_HOST || existsSync(CLAMD_SOCKET) || (CLAMSCAN_LOCAL_FALLBACK && existsSync(CLAMSCAN_BIN));
 }
 
 async function getClamscan() {
@@ -35,7 +36,7 @@ async function getClamscan() {
           host: CLAMD_HOST || false,
           port: CLAMD_HOST ? CLAMD_PORT : false,
           timeout: CLAM_INIT_TIMEOUT_MS,
-          localFallback: true,
+          localFallback: CLAMSCAN_LOCAL_FALLBACK,
         },
         preference: "clamdscan",
       })

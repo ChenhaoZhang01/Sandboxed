@@ -8,6 +8,7 @@ const MAX_REDIRECTS = Number(process.env.MAX_REDIRECTS || 15);
 const SCREENSHOT_DELAY_MS = Number(process.env.SCREENSHOT_DELAY_MS || 250);
 const PAGE_SETTLE_TIMEOUT_MS = Number(process.env.PAGE_SETTLE_TIMEOUT_MS || 2000);
 const PAGE_IDLE_TIME_MS = Number(process.env.PAGE_IDLE_TIME_MS || 400);
+const CHROME_LAUNCH_TIMEOUT_MS = Number(process.env.CHROME_LAUNCH_TIMEOUT_MS || 15000);
 // Recorded-replay screencast tuning + how long to wait for the canary submission.
 const REPLAY_MAX_FRAMES = Number(process.env.REPLAY_MAX_FRAMES || 12);
 const CREDENTIAL_TRAP_WAIT_MS = Number(process.env.CREDENTIAL_TRAP_WAIT_MS || 1200);
@@ -49,7 +50,17 @@ export async function getBrowser() {
     if (process.env.CHROME_SINGLE_PROCESS === "1") {
       args.push("--no-zygote", "--single-process");
     }
-    browserPromise = puppeteer.launch({ headless: true, args });
+    browserPromise = puppeteer
+      .launch({
+        headless: true,
+        args,
+        pipe: true,
+        timeout: CHROME_LAUNCH_TIMEOUT_MS,
+      })
+      .catch((err) => {
+        browserPromise = null;
+        throw err;
+      });
   }
   return browserPromise;
 }
