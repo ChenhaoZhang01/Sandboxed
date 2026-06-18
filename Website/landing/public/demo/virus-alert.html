@@ -1,0 +1,60 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="robots" content="noindex, nofollow" />
+    <!-- Tech-support scam: scam phrases + a support phone number, plus the lock
+         behaviors real scam pages use (alert dialog, fullscreen, exit-lock). The
+         sandbox's instrumentation records each of these as separate signals. -->
+    <title>Security Alert — Virus Detected (Microsoft Support)</title>
+    <style>
+      * { box-sizing: border-box; }
+      body {
+        margin: 0; min-height: 100vh; font-family: "Segoe UI", system-ui, sans-serif;
+        background: #001b3a; color: #fff; display: flex; align-items: center;
+        justify-content: center; padding: 24px;
+      }
+      .panel {
+        max-width: 560px; background: #062a52; border: 2px solid #ff5765; border-radius: 10px;
+        padding: 30px 32px; text-align: center; box-shadow: 0 0 60px -10px #ff576599;
+      }
+      .skull { font-size: 52px; }
+      h1 { color: #ff5765; font-size: 24px; margin: 10px 0 6px; }
+      p { font-size: 15px; line-height: 1.5; color: #d7e3f4; }
+      .code { font-family: ui-monospace, monospace; color: #ffd166; }
+      .phone {
+        display: inline-block; margin: 14px 0 6px; background: #ff5765; color: #fff;
+        font-size: 22px; font-weight: 700; padding: 12px 22px; border-radius: 8px;
+        text-decoration: none;
+      }
+      .warn { font-size: 13px; color: #ffb3ba; margin-top: 14px; }
+      .ribbon {
+        position: fixed; bottom: 10px; right: 10px; background: #11181f; color: #ffd166;
+        font-size: 11px; font-family: ui-monospace, monospace; padding: 6px 10px; border-radius: 6px;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="panel">
+      <div class="skull">⚠️</div>
+      <h1>Virus detected — your computer is infected</h1>
+      <p>
+        Windows Defender Security Alert: malware and spyware were detected on this device.
+        Your computer is infected and your data is at risk. <strong>Do not restart</strong> or
+        close this window. Error code: <span class="code">0x80070643</span>.
+      </p>
+      <a class="phone" href="tel:18005550199">Call support immediately: 1-800-555-0199 (toll free)</a>
+      <p class="warn">Microsoft support is standing by. Critical alert — call now to avoid losing your files.</p>
+    </div>
+    <div class="ribbon">SANDBOX DECOY — not a real alert</div>
+    <script>
+      // Behaviors a real scam page uses to trap the victim. The sandbox records each
+      // (dialog call, fullscreen request, exit-lock listener) without being affected.
+      try { alert("WARNING: Your computer has been blocked due to a virus. Call 1-800-555-0199 now."); } catch (e) {}
+      try { document.documentElement.requestFullscreen(); } catch (e) {}
+      try { window.open("about:blank"); } catch (e) {} // pop-under attempt (recorded, harmless)
+      window.addEventListener("beforeunload", function (e) { e.preventDefault(); e.returnValue = ""; });
+    </script>
+  </body>
+</html>

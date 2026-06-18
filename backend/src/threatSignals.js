@@ -11,6 +11,15 @@ const SCAM_TERMS = [
   "congratulations", "claim now", "redeem now", "selected as winner",
 ];
 
+const TECH_SUPPORT_TERMS = [
+  "virus detected", "virus found", "your computer is infected", "computer infected",
+  "security alert", "security warning", "critical alert", "trojan", "malware detected",
+  "spyware", "ransomware", "windows defender", "microsoft support", "apple support",
+  "call support", "call immediately", "do not close", "do not restart",
+  "toll free", "support number", "error code", "system blocked",
+];
+
+const SUPPORT_PHONE_RE = /(?:\+?1[\s.-]?)?(?:\(?\d{3}\)?[\s.-]?)\d{3}[\s.-]?\d{4}/g;
 const TRACKER_MARKERS = /analytics|tracking|pixel|doubleclick|googletagmanager|google-analytics|facebook|facebook.net|fbcdn|clarity|hotjar|segment|tiktok|criteo|scorecardresearch|quantserve|adnxs|taboola|bidr|gtm|matomo|sentry/i;
 
 function normalizeHost(hostname) {
@@ -59,6 +68,33 @@ export function detectSurveyGiveawayScam(text) {
   return {
     suspicious: matchedTerms.length > 0,
     matchedTerms,
+  };
+}
+
+export function detectTechSupportScam(input = {}) {
+  const runtime = input.runtime || {};
+  const dialogText = Array.isArray(runtime.dialogSamples)
+    ? runtime.dialogSamples.map((sample) => sample?.text || sample).join(" ")
+    : "";
+  const haystack = `${input.text || ""} ${dialogText}`.toLowerCase();
+  const matchedTerms = TECH_SUPPORT_TERMS.filter((term) => haystack.includes(term));
+  const phoneNumbers = [...new Set((haystack.match(SUPPORT_PHONE_RE) || []).map((value) => value.trim()))]
+    .slice(0, 4);
+
+  const fullscreenRequests = countValue(runtime.fullscreenRequests);
+  const dialogCalls = countValue(runtime.dialogCalls);
+  const exitLockHooks = countValue(runtime.exitLockHooks);
+
+  const hasSupportContext = matchedTerms.length >= 2 || (matchedTerms.length >= 1 && phoneNumbers.length > 0);
+  const hasLockBehavior = fullscreenRequests > 0 || dialogCalls > 0 || exitLockHooks > 0;
+
+  return {
+    suspicious: hasSupportContext && (hasLockBehavior || phoneNumbers.length > 0),
+    matchedTerms,
+    phoneNumbers,
+    fullscreenRequests,
+    dialogCalls,
+    exitLockHooks,
   };
 }
 
@@ -162,6 +198,10 @@ export function classifySignalThreats(signals = {}) {
   const runtime = signals.runtime || {};
   const tls = signals.tls || {};
   const typosquat = signals.typosquat || null;
+  const techSupportScam = signals.techSupportScam || detectTechSupportScam({
+    text: `${signals.titleText || ""} ${signals.headingText || ""} ${signals.bodyText || ""}`,
+    runtime,
+  });
   const scam = detectSurveyGiveawayScam(`${signals.titleText || ""} ${signals.headingText || ""} ${signals.bodyText || ""}`);
   const trackerAudit = auditThirdPartyTrackers(
     signals.externalResourceUrls || [],
@@ -173,12 +213,23 @@ export function classifySignalThreats(signals = {}) {
   const clipboardWrites = countValue(runtime.clipboardWrites);
   const evalCalls = countValue(runtime.evalCalls);
   const functionCtorCalls = countValue(runtime.functionCtorCalls);
+  const fullscreenRequests = countValue(runtime.fullscreenRequests);
   const keystrokeHooks = countValue(runtime.keystrokeHooks);
   const popunderAttempts = countValue(runtime.popunderAttempts);
+  const sandboxProbes = countValue(runtime.sandboxProbes);
   const walletCalls = countValue(runtime.walletCalls);
   const walletProviders = countValue(runtime.walletProviders);
+  const dialogCalls = countValue(runtime.dialogCalls);
+  const exitLockHooks = countValue(runtime.exitLockHooks);
 
   if (scam.suspicious) add(18, `Survey/giveaway scam language detected: ${scam.matchedTerms.join(", ")}`);
+  if (techSupportScam.suspicious) {
+    add(35, `Tech-support scam indicators detected: ${techSupportScam.matchedTerms.slice(0, 4).join(", ")}`);
+  }
+  if (fullscreenRequests > 0) add(15, `Page requested fullscreen mode (${fullscreenRequests} request(s))`);
+  if (dialogCalls > 0) add(12, `Blocking alert/confirm/prompt dialogs were triggered (${dialogCalls} call(s))`);
+  if (exitLockHooks > 0) add(10, `Exit-lock style navigation hooks were attached (${exitLockHooks} hook(s))`);
+  if (sandboxProbes > 0) add(20, `Page checked sandbox automation state via navigator.webdriver (${sandboxProbes} read(s))`);
   if (clipboardWrites > 0) add(8, `Clipboard write hooks were observed (${clipboardWrites} call(s))`);
   if ((evalCalls + functionCtorCalls) > 0) add(10, `Dynamic code execution hooks were observed (${evalCalls + functionCtorCalls} call(s))`);
   if (keystrokeHooks > 0) add(8, `Keylogging-style listener hooks were attached (${keystrokeHooks} listener(s))`);

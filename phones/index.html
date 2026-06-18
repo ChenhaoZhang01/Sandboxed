@@ -3,7 +3,6 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
-    <base href="/app/" />
     <title>Sandboxed — detonate links safely</title>
 
     <!-- PWA -->
@@ -31,27 +30,17 @@
         Sandboxed
       </div>
       <span class="tag mono">URL DETONATION CHAMBER</span>
-      <a href = "phishingGame.html"><button class = "btn btn-ghost">Spot the phish trainer</button></a>
-      <nav class="site-nav" aria-label="Site">
-        <a href="/">Home</a>
-        <a href="/leaderboard.html">Leaderboard</a>
-        <a href="/privacy-policy.html">Privacy</a>
-        <a href="/terms-of-service.html">Terms</a>
-      </nav>
-      <button id="settings-toggle" class="btn btn-ghost settings-toggle" type="button"
-              aria-label="Settings" aria-expanded="false">⚙</button>
-      <div class="settings-cluster" id="settings-cluster">
-        <div class="api-config">
-          <label for="api">API</label>
-          <input id="api" spellcheck="false" />
-        </div>
-        <div>
-          <label class="switch">
-            <input type="checkbox" id="historySwitch" checked>
-            <span class="slider round"></span>
-            <span class="switch-label">History</span>
-          </label>
-        </div>
+      <a class="trainer-link" href = "phishingGame.html"><button class = "btn btn-ghost">Spot the phish trainer</button></a>
+      <div class="api-config">
+        <label for="api">API</label>
+        <input id="api" spellcheck="false" />
+      </div>
+      <div class="history-config">
+        <label class="switch">
+          <input type="checkbox" id="historySwitch" checked>
+          <span class="slider round"></span>
+          <span class="switch-label">History</span>
+        </label>
       </div>
     </header>
 
@@ -108,11 +97,6 @@
               <span class="slider round"></span>
               <span class="switch-label"><b>Live explore</b> — open the sandbox &amp; click through it live</span>
             </label>
-            <label class="switch switch-sm">
-              <input type="checkbox" id="narrativeSwitch">
-              <span class="slider round"></span>
-              <span class="switch-label"><b>AI threat report</b> — plain-English summary of what the link does</span>
-            </label>
           </div>
 
           <div id="qr-reader"></div>
@@ -147,24 +131,6 @@
               ClamAV scan on the server. Nothing is uploaded except the PDF you choose.
             </p>
             <div class="scan-result hidden" id="scan-result"></div>
-          </div>
-
-          <div class="dropzone-section">
-            <span class="field-label">Scan a downloaded file</span>
-            <div class="dropzone" id="file-dropzone" tabindex="0" role="button" aria-label="Drop a file here or click to browse for a file">
-              <div class="ring"></div>
-              <p>
-                Drop any file here or
-                <button type="button" id="file-browse-btn" class="dropzone-browse">browse</button>
-              </p>
-              <p class="dropzone-status mono" id="file-dropzone-status">Drop a file here or click to browse</p>
-              <input type="file" id="file-input" hidden />
-            </div>
-            <p class="hint">
-              Sends the file to the server for a real ClamAV scan — handy for
-              checking a download before you open it.
-            </p>
-            <div class="scan-result hidden" id="file-scan-result"></div>
           </div>
         </div>
       </section>
@@ -204,7 +170,6 @@
             <input type="range" id="replay-scrub" class="replay-scrub" min="0" max="0" value="0"
                    aria-label="Scrub replay" />
             <span class="mono" id="replay-time">0 / 0</span>
-            <button class="btn btn-ghost btn-sm" id="replay-result" type="button">🖼 Result</button>
           </div>
           <button class="btn btn-ghost btn-sm hidden" id="live-start" type="button">Explore live ▶</button>
           <button class="btn btn-ghost btn-sm hidden" id="live-stop" type="button">Stop live ■</button>
@@ -214,11 +179,6 @@
         <div class="error-box hidden" id="error"></div>
 
         <div class="readout hidden" id="readout">
-          <div class="narrative hidden" id="narrative">
-            <span class="narrative-label">AI threat report</span>
-            <p class="narrative-body" id="narrative-body"></p>
-          </div>
-
           <div class="readout-grid">
             <div class="meta">
               <div class="k">Final destination</div>

@@ -1,7 +1,7 @@
 // Service worker: caches the app shell so Sandboxed installs and launches
 // offline. The detonation API is a different origin and is never cached —
 // requests to it always go to the network.
-const CACHE = "sandboxed-v1";
+const CACHE = "sandboxed-v5";
 const SHELL = [
   "./",
   "./index.html",
@@ -34,18 +34,21 @@ self.addEventListener("fetch", (event) => {
   const url = new URL(req.url);
   if (url.origin !== self.location.origin) return; // CDN + API → straight to network
 
-  // Cache-first for the app shell; fall back to network, then to the app shell
-  // for navigations so the installed app opens even when offline.
+  // Stale-while-revalidate: serve the cached copy immediately (fast + offline),
+  // but always re-fetch in the background and update the cache so code changes
+  // (styles.css, app.js, the game) propagate on the next load instead of being
+  // pinned to a stale version forever. Falls back to the app shell for offline
+  // navigations.
   event.respondWith(
     caches.match(req).then((cached) => {
-      if (cached) return cached;
-      return fetch(req)
+      const network = fetch(req)
         .then((res) => {
           const copy = res.clone();
           caches.open(CACHE).then((c) => c.put(req, copy));
           return res;
         })
         .catch(() => (req.mode === "navigate" ? caches.match("./index.html") : undefined));
+      return cached || network;
     })
   );
 });

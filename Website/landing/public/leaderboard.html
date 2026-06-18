@@ -1,0 +1,220 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Sandboxed — Leaderboard</title>
+    <link rel="icon" href="data:," />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap"
+      rel="stylesheet"
+    />
+    <style>
+      :root {
+        --bg: #0e1217; --bg-2: #0b0f14; --panel: #161d27; --panel-2: #1b232e;
+        --line: #29333f; --line-bright: #3a4754; --ink: #e8edf2; --ink-dim: #93a0ae;
+        --ink-faint: #5e6b79; --cyan: #58d7e6; --cyan-deep: #2a9dab;
+        --safe: #37d399; --warn: #ffa62b; --danger: #ff5765; --radius: 6px;
+      }
+      * { box-sizing: border-box; }
+      body {
+        margin: 0; min-height: 100vh; color: var(--ink);
+        background:
+          radial-gradient(120% 80% at 100% 0%, #131b24 0%, transparent 55%),
+          radial-gradient(100% 70% at 0% 100%, #11171f 0%, transparent 55%), var(--bg);
+        font-family: "Space Grotesk", system-ui, sans-serif;
+      }
+      .mono { font-family: "IBM Plex Mono", ui-monospace, monospace; }
+      header {
+        display: flex; align-items: center; gap: 16px; flex-wrap: wrap;
+        padding: 18px 28px; border-bottom: 1px solid var(--line);
+        background: rgba(11, 15, 20, 0.6);
+      }
+      .brand {
+        display: flex; align-items: center; gap: 10px; font-weight: 700;
+        letter-spacing: 0.14em; text-transform: uppercase; font-size: 15px;
+      }
+      .brand .glyph {
+        width: 22px; height: 22px; border-radius: 50%; border: 2px solid var(--cyan);
+        box-shadow: 0 0 14px -2px var(--cyan-deep);
+      }
+      header nav { margin-left: auto; display: flex; gap: 14px; }
+      header nav a {
+        color: var(--ink-dim); text-decoration: none; font-size: 13px;
+        letter-spacing: 0.04em;
+      }
+      header nav a:hover { color: var(--cyan); }
+      main { max-width: 820px; margin: 0 auto; padding: 32px 24px 80px; }
+      h1 { font-size: clamp(1.6rem, 4vw, 2.4rem); margin: 0 0 6px; }
+      .sub { color: var(--ink-faint); margin: 0 0 24px; font-size: 14px; }
+      .tabs { display: flex; gap: 8px; margin-bottom: 18px; }
+      .tab {
+        font-family: "IBM Plex Mono", monospace; font-size: 12px;
+        letter-spacing: 0.08em; text-transform: uppercase; cursor: pointer;
+        background: var(--bg-2); color: var(--ink-dim);
+        border: 1px solid var(--line-bright); border-radius: 999px; padding: 8px 16px;
+      }
+      .tab.active { background: var(--cyan); color: #06222a; border-color: var(--cyan); font-weight: 600; }
+      .board { display: none; }
+      .board.active { display: block; }
+      .row {
+        display: grid; grid-template-columns: 38px 1fr auto; align-items: center;
+        gap: 14px; padding: 12px 16px; border: 1px solid var(--line);
+        border-radius: var(--radius); background: var(--panel); margin-bottom: 8px;
+      }
+      .row .rank {
+        font-family: "IBM Plex Mono", monospace; font-size: 14px; color: var(--ink-faint);
+        text-align: center;
+      }
+      .row.top1 { border-color: var(--cyan-deep); box-shadow: 0 0 24px -12px var(--cyan); }
+      .row.top1 .rank { color: var(--cyan); }
+      .row .label { font-size: 15px; word-break: break-all; }
+      .row .label .host { font-family: "IBM Plex Mono", monospace; }
+      .row .pts {
+        font-family: "IBM Plex Mono", monospace; font-weight: 600; font-size: 15px;
+        white-space: nowrap;
+      }
+      .verdict { font-size: 11px; letter-spacing: 0.1em; text-transform: uppercase; margin-left: 8px; }
+      .v-safe { color: var(--safe); } .v-suspicious { color: var(--warn); } .v-dangerous { color: var(--danger); }
+      .pts.dangerous { color: var(--danger); } .pts.suspicious { color: var(--warn); } .pts.safe { color: var(--safe); }
+      .state {
+        font-family: "IBM Plex Mono", monospace; font-size: 13px; color: var(--ink-faint);
+        padding: 20px; text-align: center; border: 1px dashed var(--line); border-radius: var(--radius);
+      }
+      .foot { margin-top: 26px; font-size: 12px; color: var(--ink-faint); }
+      .foot a { color: var(--cyan); }
+    </style>
+  </head>
+  <body>
+    <header>
+      <a class="brand" href="/" style="text-decoration:none;color:inherit">
+        <span class="glyph" aria-hidden="true"></span> Sandboxed
+      </a>
+      <nav>
+        <a href="/">Home</a>
+        <a href="/app/">Open app</a>
+        <a href="/app/phishingGame.html">Play game</a>
+      </nav>
+    </header>
+
+    <main>
+      <h1>Leaderboard</h1>
+      <p class="sub mono" id="sub">Today's best — resets daily</p>
+
+      <div class="tabs">
+        <button class="tab active" data-board="players">Top phish-spotters</button>
+        <button class="tab" data-board="links">Most dangerous links</button>
+      </div>
+
+      <section class="board active" id="board-players">
+        <div class="state" id="players-state">Loading…</div>
+        <div id="players-list"></div>
+      </section>
+
+      <section class="board" id="board-links">
+        <div class="state" id="links-state">Loading…</div>
+        <div id="links-list"></div>
+      </section>
+
+      <p class="foot">
+        Scores from the <a href="/app/phishingGame.html">Spot the Phish</a> trainer.
+        Dangerous links are the scariest URLs <a href="/app/">detonated</a> today.
+      </p>
+    </main>
+
+    <script>
+      const API_BASE = (localStorage.getItem("sandboxed_api") || "https://sandboxed.fly.dev").replace(/\/$/, "");
+
+      function startOfTodayMs() {
+        const d = new Date();
+        d.setHours(0, 0, 0, 0);
+        return d.getTime();
+      }
+      function esc(s) {
+        return String(s).replace(/[&<>"']/g, (c) =>
+          ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c])
+        );
+      }
+      function hostOf(u) {
+        try { return new URL(u).hostname.replace(/^www\./, ""); } catch { return u || "—"; }
+      }
+
+      // --- tabs ---
+      document.querySelectorAll(".tab").forEach((t) =>
+        t.addEventListener("click", () => {
+          document.querySelectorAll(".tab").forEach((x) => x.classList.remove("active"));
+          document.querySelectorAll(".board").forEach((x) => x.classList.remove("active"));
+          t.classList.add("active");
+          document.getElementById("board-" + t.dataset.board).classList.add("active");
+        })
+      );
+
+      // --- players board ---
+      async function loadPlayers() {
+        const state = document.getElementById("players-state");
+        const list = document.getElementById("players-list");
+        try {
+          const res = await fetch(API_BASE + "/leaderboard?period=day");
+          const json = await res.json();
+          const data = (json && json.data) || [];
+          if (!data.length) {
+            state.textContent = "No scores yet today — be the first to play!";
+            return;
+          }
+          state.style.display = "none";
+          list.innerHTML = data
+            .map((e, i) =>
+              `<div class="row ${i === 0 ? "top1" : ""}">
+                 <div class="rank">${i === 0 ? "🥇" : i + 1}</div>
+                 <div class="label">${esc(e.name || "ANON")}</div>
+                 <div class="pts">${Number(e.score) || 0}</div>
+               </div>`
+            )
+            .join("");
+        } catch (err) {
+          state.textContent = "Couldn't reach the leaderboard service (" + API_BASE + ").";
+        }
+      }
+
+      // --- dangerous links board (computed from detonation history) ---
+      async function loadLinks() {
+        const state = document.getElementById("links-state");
+        const list = document.getElementById("links-list");
+        try {
+          const res = await fetch(API_BASE + "/verified-links");
+          const json = await res.json();
+          const all = (json && json.data) || [];
+          const since = startOfTodayMs();
+          const today = all
+            .filter((x) => x && x.data && typeof x.data.score === "number" && (x.timestamp || 0) >= since)
+            .sort((a, b) => b.data.score - a.data.score)
+            .slice(0, 20);
+          if (!today.length) {
+            state.textContent = "No links detonated yet today.";
+            return;
+          }
+          state.style.display = "none";
+          list.innerHTML = today
+            .map((x, i) => {
+              const v = (x.data.verdict || "safe").toLowerCase();
+              const host = x.data.finalHost || hostOf(x.url);
+              return `<div class="row ${i === 0 ? "top1" : ""}">
+                 <div class="rank">${i + 1}</div>
+                 <div class="label"><span class="host">${esc(host)}</span>
+                   <span class="verdict v-${v}">${esc(v)}</span></div>
+                 <div class="pts ${v}">${Number(x.data.score) || 0}</div>
+               </div>`;
+            })
+            .join("");
+        } catch (err) {
+          state.textContent = "Couldn't reach the detonation service (" + API_BASE + ").";
+        }
+      }
+
+      loadPlayers();
+      loadLinks();
+    </script>
+  </body>
+</html>

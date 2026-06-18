@@ -48,3 +48,65 @@ document.getElementById("opts").addEventListener("click", (e) => {
   e.preventDefault();
   chrome.runtime.openOptionsPage();
 });
+
+// ---- file / download checker (ClamAV via the backend /scan-file) ----
+const fileDropzone = document.getElementById("fileDropzone");
+const fileInput = document.getElementById("fileInput");
+const fileBrowse = document.getElementById("fileBrowse");
+const fileStatus = document.getElementById("fileStatus");
+const fileScan = document.getElementById("fileScan");
+
+async function scanFile(file) {
+  if (!file) return;
+  fileStatus.textContent = "Scanning " + file.name + "…";
+  fileScan.hidden = true;
+  const base = await SBX.getApiBase();
+  let data;
+  try {
+    const res = await fetch(base + "/scan-file", {
+      method: "POST",
+      headers: { "Content-Type": file.type || "application/octet-stream" },
+      body: file,
+    });
+    data = await res.json().catch(() => null);
+    if (!res.ok) data = { status: "error", message: (data && data.error) || `HTTP ${res.status}` };
+  } catch (err) {
+    data = { status: "error", message: "Could not reach " + base };
+  }
+  renderFileScan(file.name, data || { status: "error" });
+  fileStatus.textContent = "ClamAV download / file checker";
+  fileInput.value = "";
+}
+
+function renderFileScan(name, data) {
+  let line;
+  if (data.status === "infected") line = `INFECTED — ${(data.viruses || []).join(", ") || "unknown signature"}`;
+  else if (data.status === "clean") line = "Clean.";
+  else if (data.status === "unavailable") line = "Scanner unavailable on server.";
+  else line = "Could not scan (" + (data.message || "unknown error") + ").";
+
+  fileScan.textContent = `${name}: ${line}`;
+  fileScan.classList.remove("safe", "warn", "danger");
+  fileScan.classList.add(data.status === "infected" ? "danger" : data.status === "clean" ? "safe" : "warn");
+  fileScan.hidden = false;
+}
+
+fileBrowse.addEventListener("click", () => fileInput.click());
+fileDropzone.addEventListener("click", (e) => {
+  if (e.target !== fileBrowse) fileInput.click();
+});
+fileInput.addEventListener("change", () => scanFile(fileInput.files && fileInput.files[0]));
+["dragenter", "dragover"].forEach((evt) =>
+  fileDropzone.addEventListener(evt, (e) => {
+    e.preventDefault();
+    fileDropzone.classList.add("dragover");
+  })
+);
+["dragleave", "dragend"].forEach((evt) =>
+  fileDropzone.addEventListener(evt, () => fileDropzone.classList.remove("dragover"))
+);
+fileDropzone.addEventListener("drop", (e) => {
+  e.preventDefault();
+  fileDropzone.classList.remove("dragover");
+  scanFile(e.dataTransfer.files && e.dataTransfer.files[0]);
+});

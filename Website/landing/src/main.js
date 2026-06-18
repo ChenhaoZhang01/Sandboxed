@@ -155,10 +155,7 @@ document.querySelectorAll('[data-go]').forEach((a) =>
   a.addEventListener('click', (e) => { e.preventDefault(); goTo(parseInt(a.dataset.go, 10)) })
 )
 
-// CTA links — point these at the real Sandboxed app URL when it's deployed.
-document.querySelectorAll('[data-cta]').forEach((a) =>
-  a.addEventListener('click', (e) => { e.preventDefault(); /* TODO: window.location = app URL */ })
-)
+// CTA links navigate to the bundled app at /app/ via their href — no JS needed.
 
 // ---------- boot ----------
 animateIn(0) // play section 1's entrance on load

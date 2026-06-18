@@ -7,6 +7,10 @@ verdict — **without the link ever touching the user's device.**
 
 ## What it does
 
+`GET /detonate/stream?url=...` streams the same scan over SSE: `progress`
+events for stages like resolving, redirects, screenshotting, and scoring, then
+a final `result` event with the normal response shape.
+
 `POST /detonate { "url": "..." }` →
 
 1. Opens the URL in an **isolated incognito browser context** (clean cookies/storage).
@@ -15,7 +19,8 @@ verdict — **without the link ever touching the user's device.**
 4. Extracts **behavioral signals**: password fields, payment fields, cross-domain
    credential POSTs, brand impersonation, auto-downloads, meta-refresh, insecure HTTP.
 5. Adds **runtime threat instrumentation** for clipboard hooks, `eval`/Function usage,
-   keystroke listeners, pop-under/window-open behavior, crypto-wallet provider hooks
+   keystroke listeners, pop-under/window-open behavior, fullscreen/dialog exit-locks,
+   `navigator.webdriver` sandbox probes, crypto-wallet provider hooks
    (`window.ethereum` / `window.solana`), typosquat lookalikes, and TLS/certificate checks.
 6. Enriches with **domain age** (RDAP, free, no key) and optional **Google Safe Browsing**.
 6. Returns a **verdict** (`safe` / `suspicious` / `dangerous`) + scored reasons + screenshot.

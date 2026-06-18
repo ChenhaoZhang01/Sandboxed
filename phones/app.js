@@ -7,10 +7,6 @@ apiInput.value = localStorage.getItem("sandboxed_api") || DEFAULT_API;
 apiInput.addEventListener("change", () =>
   localStorage.setItem("sandboxed_api", apiInput.value.trim())
 );
-const checked = (id, fallback = false) => {
-  const el = $(id);
-  return el ? el.checked : fallback;
-};
 const apiBase = () => (apiInput.value.trim() || DEFAULT_API).replace(/\/$/, "");
 
 // --- elements ---
@@ -33,13 +29,6 @@ const fileInput = $("pdf-file-input");
 const browseBtn = $("pdf-browse-btn");
 const dropzoneStatus = $("dropzone-status");
 const scanResult = $("scan-result");
-
-// --- generic file scan elements ---
-const fileDropzone = $("file-dropzone");
-const anyFileInput = $("file-input");
-const fileBrowseBtn = $("file-browse-btn");
-const fileDropzoneStatus = $("file-dropzone-status");
-const fileScanResult = $("file-scan-result");
 
 //Settings
 const historySwitch = $("historySwitch")
@@ -144,7 +133,6 @@ function currentAnalysisLayers() {
     phishingEnrichment: checked("phishingSwitch"),
     recordReplay: checked("replaySwitch", true),
     credentialTrap: checked("trapSwitch"),
-    aiNarrative: checked("narrativeSwitch"),
   };
 }
 
@@ -312,71 +300,12 @@ function renderScanResult(filename, local, server) {
     lines.push(`ClamAV: could not complete scan (${server.message || "unknown error"}).`);
   }
 
-  // /AA (additional actions) alone is a weak signal — common in benign PDFs
-  const onlyWeakIndicator = local.foundIndicators.length == 1 && local.foundIndicators[0] == "/AA";
-  const infected = (server.status == "infected") || (local.foundIndicators.length > 0 && !onlyWeakIndicator);
-  const confirmedClean = (server.status == "clean") && local.foundIndicators.length == 0;
+  const infected = (server.status == "infected") || local.foundIndicators.length > 0;
+  const confirmedClean = (server.status == "clean") && local.foundIndicators.length === 0;
 
   scanResult.textContent = lines.join("\n");
   scanResult.classList.remove("hidden", "safe", "warn", "danger");
   scanResult.classList.add(infected ? "danger" : confirmedClean ? "safe" : "warn");
-}
-
-// Generic file checker: POST any file's raw bytes to the backend for a real
-// ClamAV scan (the same /scan-file the extension's download guard uses). Unlike
-// the PDF checker there's no client-side static heuristic — just the AV verdict.
-async function scanFileOnServer(file) {
-  try {
-    const res = await fetch(apiBase() + "/scan-file", {
-      method: "POST",
-      headers: { "Content-Type": file.type || "application/octet-stream" },
-      body: file,
-    });
-    const data = await res.json().catch(() => null);
-    if (!res.ok) {
-      return { status: "error", message: (data && data.error) || `Server returned ${res.status}` };
-    }
-    return data;
-  } catch (err) {
-    return { status: "error", message: "Could not reach " + apiBase() + " (" + err.message + ")" };
-  }
-}
-
-async function handleScanFile(file) {
-  if (!file) return;
-
-  fileDropzoneStatus.textContent = "Scanning…";
-  fileDropzone.classList.add("scanning");
-  fileScanResult.classList.add("hidden");
-
-  try {
-    const server = await scanFileOnServer(file);
-    renderFileScanResult(file.name, server);
-  } finally {
-    fileDropzone.classList.remove("scanning");
-    fileDropzoneStatus.textContent = "Drop a file here or click to browse";
-    anyFileInput.value = "";
-  }
-}
-
-function renderFileScanResult(filename, server) {
-  const lines = [`File scan: ${filename}`, ""];
-
-  if (server.status === "infected") {
-    lines.push(`ClamAV: INFECTED — ${(server.viruses || []).join(", ") || "unknown signature"}`);
-  } else if (server.status === "clean") {
-    lines.push("ClamAV: clean.");
-  } else if (server.status === "unavailable") {
-    lines.push("ClamAV: scanner unavailable on server.");
-  } else {
-    lines.push(`ClamAV: could not complete scan (${server.message || "unknown error"}).`);
-  }
-
-  fileScanResult.textContent = lines.join("\n");
-  fileScanResult.classList.remove("hidden", "safe", "warn", "danger");
-  fileScanResult.classList.add(
-    server.status === "infected" ? "danger" : server.status === "clean" ? "safe" : "warn"
-  );
 }
 
 function showError(msg) {
@@ -392,16 +321,11 @@ function render(d) {
   setStatus("armed", "Contained");
   consoleState.textContent = "Done";
 
-  // screenshot behind blast glass. Remember it so the replay player can always
-  // return here — the final screenshot is taken after the page settles, so it's
-  // the canonical "result" view (replay frames can end on a half-loaded page).
+  // screenshot behind blast glass
   if (d.screenshotBase64) {
-    finalShotSrc = "data:image/jpeg;base64," + d.screenshotBase64;
-    shot.src = finalShotSrc;
+    shot.src = "data:image/jpeg;base64," + d.screenshotBase64;
     shot.classList.remove("hidden");
     glass.classList.remove("hidden");
-  } else {
-    finalShotSrc = null;
   }
 
   // verdict stamp
@@ -423,11 +347,8 @@ function render(d) {
     (d.redirectCount ?? 0) + (d.redirectCount === 1 ? " hop" : " hops");
   $("m-title").textContent = d.title || "—";
 
-  // AI threat report
-  renderNarrative(d.narrative);
-
   // phishing
-  renderPhishing(d.phishing, d.signals);
+  renderPhishing(d.phishing);
   renderTrap(d.credentialTrap);
   setupReplay(d.replayFrames || []);
   setupLive(d.finalUrl || d.requestedUrl || urlInput.value);
@@ -438,25 +359,10 @@ function render(d) {
   readout.classList.remove("hidden");
 }
 
-function renderNarrative(text) {
-  const box = $("narrative");
-  const body = $("narrative-body");
-  if (!box || !body) return;
-  if (!text) {
-    box.classList.add("hidden");
-    body.textContent = "";
-    return;
-  }
-  body.textContent = text;
-  box.classList.remove("hidden");
-}
-
-function renderPhishing(p, signals) {
+function renderPhishing(p) {
   const el = $("m-phishing");
   if (!el) return;
 
-  // Highest confidence: the phishing enrichment matched this page's favicon to a
-  // real brand whose domain doesn't match.
   if (p && p.phishing) {
     el.innerHTML =
       "⚠️ Spoofing <strong>" + escapeHtml(p.spoofedBrand) + "</strong>" +
@@ -466,26 +372,8 @@ function renderPhishing(p, signals) {
     return;
   }
 
-  // Deterministic signal (always computed): the page prominently claims to be a
-  // known brand but lives on an unrelated domain.
-  const brands = (signals && signals.brandImpersonation) || [];
-  if (brands.length) {
-    el.innerHTML =
-      "⚠️ Spoofing <strong>" + escapeHtml(brands.join(", ")) + "</strong>" +
-      " — page claims to be this brand on an unrelated domain";
-    el.className = "v phishing-warn";
-    return;
-  }
-
-  // Enrichment ran and found no clone.
-  if (p) {
-    el.textContent = "✓ No spoof detected";
-    el.className = "v phishing-ok";
-    return;
-  }
-
-  el.textContent = "—";
-  el.className = "v";
+  el.textContent = "✓ No spoof detected";
+  el.className = "v phishing-ok";
 }
 
 function renderTrajectory(chain) {
@@ -561,13 +449,11 @@ function renderTrap(t) {
 let replayFrames = [];
 let replayIdx = 0;
 let replayTimer = null;
-let finalShotSrc = null;
 const chamberTools = $("chamber-tools");
 const replayControls = $("replay-controls");
 const replayPlayBtn = $("replay-play");
 const replayScrub = $("replay-scrub");
 const replayTime = $("replay-time");
-const replayResultBtn = $("replay-result");
 
 function showFrame(i) {
   if (!replayFrames.length) return;
@@ -584,21 +470,6 @@ function stopReplay() {
   }
   replayPlayBtn.textContent = "▶ Replay";
 }
-// Return to the final screenshot — used when playback finishes and via the
-// explicit "Result" button, so the viewer is never stuck on a half-loaded
-// replay frame with no way back to the captured result.
-function restoreFinalShot() {
-  stopReplay();
-  if (finalShotSrc) {
-    shot.src = finalShotSrc;
-    shot.classList.remove("hidden");
-  }
-  if (replayFrames.length) {
-    replayIdx = replayFrames.length - 1;
-    replayScrub.value = String(replayIdx);
-    replayTime.textContent = "result";
-  }
-}
 function playReplay() {
   if (replayTimer) {
     stopReplay();
@@ -608,9 +479,7 @@ function playReplay() {
   replayPlayBtn.textContent = "⏸ Pause";
   replayTimer = setInterval(() => {
     if (replayIdx >= replayFrames.length - 1) {
-      // Land on the canonical final screenshot, not the last (possibly
-      // still-loading) frame.
-      restoreFinalShot();
+      stopReplay();
       return;
     }
     showFrame(replayIdx + 1);
@@ -635,7 +504,6 @@ replayScrub.addEventListener("input", () => {
   stopReplay();
   showFrame(Number(replayScrub.value));
 });
-if (replayResultBtn) replayResultBtn.addEventListener("click", restoreFinalShot);
 
 // ---------- live interactive sandbox ----------
 const liveCanvas = $("live-canvas");
@@ -810,29 +678,6 @@ function escapeHtml(s) {
   );
 }
 
-// --- mobile settings dropdown (gear is only visible on phones via CSS) ---
-const settingsToggle = $("settings-toggle");
-const settingsCluster = $("settings-cluster");
-if (settingsToggle && settingsCluster) {
-  const closeSettings = () => {
-    settingsCluster.classList.remove("open");
-    settingsToggle.setAttribute("aria-expanded", "false");
-  };
-  settingsToggle.addEventListener("click", (e) => {
-    e.stopPropagation();
-    const open = settingsCluster.classList.toggle("open");
-    settingsToggle.setAttribute("aria-expanded", open ? "true" : "false");
-  });
-  document.addEventListener("click", (e) => {
-    if (!settingsCluster.classList.contains("open")) return;
-    if (settingsCluster.contains(e.target) || settingsToggle.contains(e.target)) return;
-    closeSettings();
-  });
-  document.addEventListener("keydown", (e) => {
-    if (e.key === "Escape") closeSettings();
-  });
-}
-
 // --- events ---
 goBtn.addEventListener("click", () => detonate());
 urlInput.addEventListener("keydown", (e) => {
@@ -906,37 +751,21 @@ dropzone.addEventListener("drop", (e) => {
   handlePdfFile(e.dataTransfer.files && e.dataTransfer.files[0]);
 });
 
-// --- generic file dropzone ---
-fileBrowseBtn.addEventListener("click", () => anyFileInput.click());
-fileDropzone.addEventListener("click", (e) => {
-  if (e.target !== fileBrowseBtn) anyFileInput.click();
-});
-fileDropzone.addEventListener("keydown", (e) => {
-  if ((e.key === "Enter" || e.key === " ") && e.target === fileDropzone) {
-    e.preventDefault();
-    anyFileInput.click();
-  }
-});
-anyFileInput.addEventListener("change", () => handleScanFile(anyFileInput.files && anyFileInput.files[0]));
-
-["dragenter", "dragover"].forEach((evt) =>
-  fileDropzone.addEventListener(evt, (e) => {
-    e.preventDefault();
-    fileDropzone.classList.add("dragover");
-  })
-);
-["dragleave", "dragend"].forEach((evt) =>
-  fileDropzone.addEventListener(evt, () => fileDropzone.classList.remove("dragover"))
-);
-fileDropzone.addEventListener("drop", (e) => {
-  e.preventDefault();
-  fileDropzone.classList.remove("dragover");
-  handleScanFile(e.dataTransfer.files && e.dataTransfer.files[0]);
-});
-
 // --- PWA: register the service worker (offline app shell + installable) ---
 if ("serviceWorker" in navigator) {
   window.addEventListener("load", () => {
     navigator.serviceWorker.register("sw.js").catch(() => {});
   });
 }
+
+// Phone PWA share target: Android can launch this page with ?url= or ?text=.
+// Keep this tiny so the phone app stays identical to the main frontend.
+(() => {
+  const params = new URLSearchParams(location.search);
+  const shared = [params.get("url"), params.get("text"), params.get("title")]
+    .filter(Boolean)
+    .join(" ");
+  if (!shared) return;
+  const match = shared.match(/https?:\/\/[^\s<>"']+/i) || shared.match(/\b[a-z0-9.-]+\.[a-z]{2,}(?:\/[^\s<>"']*)?/i);
+  if (match) detonate(match[0]);
+})();

@@ -18,6 +18,20 @@
 
   document.addEventListener("click", onClick, true);
 
+  // Report user gestures (throttled) so the background download guard can tell a
+  // click-initiated download from a drive-by one. Independent of checkMode.
+  let lastGestureSent = 0;
+  function reportGesture() {
+    const now = Date.now();
+    if (now - lastGestureSent < 500) return;
+    lastGestureSent = now;
+    try {
+      chrome.runtime.sendMessage({ type: "USER_GESTURE" }, () => void chrome.runtime.lastError);
+    } catch {}
+  }
+  document.addEventListener("click", reportGesture, true);
+  document.addEventListener("keydown", reportGesture, true);
+
   function onClick(e) {
     if (!clickActive()) return;
     if (e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
@@ -65,7 +79,9 @@
 
   function proceed(url, newTab) {
     approved.add(url);
-    if (newTab) window.open(url, "_blank", "noopener");
+    if (newTab) {
+      sendMessage({ type: "OPEN_URL", url });
+    }
     else window.location.assign(url);
   }
 

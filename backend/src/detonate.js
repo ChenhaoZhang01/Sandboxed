@@ -1,10 +1,14 @@
 import puppeteer from "puppeteer";
 import { isBlockedUrl, isBlockedLiteral } from "./ssrf.js";
-import { detectTyposquat, inspectTlsSecurity } from "./threatSignals.js";
+import { detectTechSupportScam, detectTyposquat, inspectTlsSecurity } from "./threatSignals.js";
+import { makeCanary, fillCredentialForm, matchCanaryHit } from "./credentialTrap.js";
 
 const DETONATE_TIMEOUT_MS = Number(process.env.DETONATE_TIMEOUT_MS || 30000);
 const MAX_REDIRECTS = Number(process.env.MAX_REDIRECTS || 15);
 const SCREENSHOT_DELAY_MS = Number(process.env.SCREENSHOT_DELAY_MS || 1500);
+// Recorded-replay screencast tuning + how long to wait for the canary submission.
+const REPLAY_MAX_FRAMES = Number(process.env.REPLAY_MAX_FRAMES || 30);
+const CREDENTIAL_TRAP_WAIT_MS = Number(process.env.CREDENTIAL_TRAP_WAIT_MS || 3000);
 
 // A realistic UA so phishing kits behave normally (many cloak against headless).
 const USER_AGENT =
@@ -72,10 +76,16 @@ async function installThreatHooks(page) {
     const tracker = window.__sandboxedThreatSignals || (window.__sandboxedThreatSignals = {
       clipboardWrites: 0,
       clipboardSamples: [],
+      dialogCalls: 0,
+      dialogSamples: [],
       evalCalls: 0,
+      exitLockHooks: 0,
       functionCtorCalls: 0,
+      fullscreenRequests: 0,
       keystrokeHooks: 0,
       popunderAttempts: 0,
+      sandboxProbes: 0,
+      sandboxProbeProperties: [],
       walletCalls: 0,
       walletProviders: [],
     });
@@ -88,11 +98,24 @@ async function installThreatHooks(page) {
       if (!tracker.walletProviders.includes(name)) tracker.walletProviders.push(name);
     };
 
+    const markSandboxProbe = (name) => {
+      if (!tracker.sandboxProbeProperties.includes(name)) {
+        tracker.sandboxProbeProperties.push(name);
+      }
+    };
+
     const recordClipboardText = (value) => {
       const text = String(value || "");
       tracker.clipboardWrites = (tracker.clipboardWrites || 0) + 1;
       if (text) tracker.clipboardSamples.push(text.slice(0, 160));
       if (tracker.clipboardSamples.length > 8) tracker.clipboardSamples.shift();
+    };
+
+    const recordDialog = (type, value) => {
+      const text = String(value || "");
+      tracker.dialogCalls = (tracker.dialogCalls || 0) + 1;
+      tracker.dialogSamples.push({ type, text: text.slice(0, 220) });
+      if (tracker.dialogSamples.length > 8) tracker.dialogSamples.shift();
     };
 
     const wrapWalletProvider = (name, provider) => {
@@ -117,6 +140,33 @@ async function installThreatHooks(page) {
     } catch {}
 
     try {
+      const originalAlert = window.alert.bind(window);
+      window.alert = (message) => {
+        recordDialog("alert", message);
+        return undefined;
+      };
+      window.alert.__sandboxedOriginal = originalAlert;
+    } catch {}
+
+    try {
+      const originalConfirm = window.confirm.bind(window);
+      window.confirm = (message) => {
+        recordDialog("confirm", message);
+        return false;
+      };
+      window.confirm.__sandboxedOriginal = originalConfirm;
+    } catch {}
+
+    try {
+      const originalPrompt = window.prompt.bind(window);
+      window.prompt = (message) => {
+        recordDialog("prompt", message);
+        return null;
+      };
+      window.prompt.__sandboxedOriginal = originalPrompt;
+    } catch {}
+
+    try {
       const originalEval = window.eval.bind(window);
       window.eval = (...args) => {
         bump("evalCalls");
@@ -136,11 +186,42 @@ async function installThreatHooks(page) {
     try {
       const originalAddEventListener = EventTarget.prototype.addEventListener;
       EventTarget.prototype.addEventListener = function (type, listener, options) {
-        if (/key|keyup|keydown|keypress|input|paste|clipboard/i.test(String(type))) {
+        const eventType = String(type);
+        if (/key|keyup|keydown|keypress|input|paste|clipboard/i.test(eventType)) {
           bump("keystrokeHooks");
+        }
+        if (/beforeunload|unload|popstate|hashchange/i.test(eventType)) {
+          bump("exitLockHooks");
         }
         return originalAddEventListener.call(this, type, listener, options);
       };
+    } catch {}
+
+    try {
+      const wrapFullscreen = (proto) => {
+        if (!proto || typeof proto.requestFullscreen !== "function") return;
+        const originalRequestFullscreen = proto.requestFullscreen;
+        proto.requestFullscreen = function (...args) {
+          bump("fullscreenRequests");
+          return originalRequestFullscreen.apply(this, args);
+        };
+      };
+      wrapFullscreen(Element.prototype);
+    } catch {}
+
+    try {
+      const desc = Object.getOwnPropertyDescriptor(Navigator.prototype, "webdriver");
+      if (desc && desc.configurable !== false) {
+        Object.defineProperty(Navigator.prototype, "webdriver", {
+          configurable: true,
+          enumerable: desc.enumerable,
+          get() {
+            bump("sandboxProbes");
+            markSandboxProbe("navigator.webdriver");
+            return desc.get ? desc.get.call(this) : desc.value;
+          },
+        });
+      }
     } catch {}
 
     try {
@@ -191,7 +272,20 @@ async function installThreatHooks(page) {
  * @param {string} targetUrl
  * @returns {Promise<object>} raw detonation report (no verdict — that's risk.js)
  */
-export async function detonate(targetUrl) {
+export async function detonate(targetUrl, options = {}) {
+  const recordReplay = options.recordReplay !== false; // default on
+  const credentialTrapEnabled = options.credentialTrap === true; // opt-in
+  const startedAt = Date.now();
+  const onProgress = typeof options.onProgress === "function" ? options.onProgress : () => {};
+  const emitProgress = (stage, message, extra = {}) => {
+    try {
+      onProgress({ stage, message, elapsedMs: Date.now() - startedAt, ...extra });
+    } catch {
+      /* progress observers are best-effort */
+    }
+  };
+
+  emitProgress("launching", "launching sandbox");
   const browser = await getBrowser();
   // Incognito context = clean cookies/storage per detonation (sandbox-ish).
   const context = await browser.createBrowserContext();
@@ -202,7 +296,19 @@ export async function detonate(targetUrl) {
   const blocked = [];
   let mainStatus = null;
 
+  // Credential-trap state. Armed AFTER the main report is captured so the trap
+  // never perturbs scoring; the request handler below watches for the canary.
+  const canary = makeCanary();
+  let trapArmed = false;
+  let trapFinalHost = "";
+  let credentialTrapResult = null;
+
+  // Recorded-replay frames captured via CDP screencast (when enabled).
+  const replayFrames = [];
+  const replayStarted = Date.now();
+
   try {
+    emitProgress("instrumenting", "installing safety hooks");
     await installThreatHooks(page);
 
     await page.setUserAgent(USER_AGENT);
@@ -215,17 +321,57 @@ export async function detonate(targetUrl) {
       downloads.push({ url: e.url, suggestedFilename: e.suggestedFilename || null });
     });
 
+    // Recorded replay: stream the page as low-res JPEG frames so the user can
+    // scrub through what happened. Capped at REPLAY_MAX_FRAMES; we ack each frame
+    // (required by CDP) and stop the screencast before the final screenshot.
+    if (recordReplay) {
+      client.on("Page.screencastFrame", (frame) => {
+        if (replayFrames.length < REPLAY_MAX_FRAMES) {
+          replayFrames.push({ data: frame.data, offsetMs: Date.now() - replayStarted });
+        }
+        client
+          .send("Page.screencastFrameAck", { sessionId: frame.sessionId })
+          .catch(() => {});
+      });
+      await client.send("Page.enable").catch(() => {});
+      await client
+        .send("Page.startScreencast", {
+          format: "jpeg",
+          quality: 50,
+          maxWidth: 800,
+          maxHeight: 500,
+          everyNthFrame: 1,
+        })
+        .catch(() => {});
+    }
+
     // Request interception lets us (a) record the redirect chain, (b) enforce
     // SSRF on every navigation hop, and (c) actually abort runaway redirects.
     await page.setRequestInterception(true);
     page.on("request", async (req) => {
       try {
         const url = req.url();
+
+        // Credential trap: if the canary submission is going out, capture WHERE it
+        // would land and abort it so the (fake) password never actually leaves.
+        if (trapArmed && !credentialTrapResult) {
+          const hit = matchCanaryHit(req, canary.token, trapFinalHost);
+          if (hit) {
+            credentialTrapResult = hit;
+            return await req.abort("blockedbyclient");
+          }
+        }
+
         const isNav =
           req.isNavigationRequest() && req.frame() === page.mainFrame();
 
         if (isNav && url !== "about:blank") {
           redirectChain.push(url);
+          emitProgress("redirect", `redirect ${redirectChain.length}/${MAX_REDIRECTS}`, {
+            index: redirectChain.length,
+            max: MAX_REDIRECTS,
+            url,
+          });
           if (redirectChain.length > MAX_REDIRECTS) {
             return await req.abort("failed");
           }
@@ -258,6 +404,7 @@ export async function detonate(targetUrl) {
 
     let response = null;
     try {
+      emitProgress("navigating", "opening target");
       response = await page.goto(targetUrl, {
         waitUntil: "domcontentloaded",
         timeout: DETONATE_TIMEOUT_MS,
@@ -270,10 +417,11 @@ export async function detonate(targetUrl) {
 
     const finalUrl = page.url();
 
+    emitProgress("extracting", "extracting page signals");
     const pageMeta = await extractPageData(page);
     const runtimeSignals = await collectRuntimeSignals(page);
     const tlsSignals = await inspectTls(page, finalUrl);
-    const signalData = await extractSignals(page, finalUrl);
+    const signalData = await extractSignals(page, finalUrl, runtimeSignals);
     const cookieNames = (await page.cookies().catch(() => [])).map((cookie) => cookie.name);
     const signals = {
       ...signalData,
@@ -285,6 +433,7 @@ export async function detonate(targetUrl) {
 
     // Give heavy / animated pages a brief moment to settle before capturing
     // the final screenshot (helps with loading-overlay pages like x.com).
+    emitProgress("screenshotting", "screenshotting");
     if (SCREENSHOT_DELAY_MS > 0) {
       await new Promise((resolve) => setTimeout(resolve, SCREENSHOT_DELAY_MS));
     }
@@ -294,6 +443,38 @@ export async function detonate(targetUrl) {
       screenshot = await page.screenshot({ type: "jpeg", quality: 60, encoding: "base64" });
     } catch {
       screenshot = null;
+    }
+
+    if (recordReplay) {
+      await client.send("Page.stopScreencast").catch(() => {});
+    }
+
+    // Credential trap runs LAST so it can't perturb the report above. Only bother
+    // if there's a password field to fill. We fill canary creds, submit, and wait
+    // briefly for the request handler to catch (and abort) the outbound submission.
+    let credentialTrap = null;
+    if (credentialTrapEnabled && signals.passwordFields > 0) {
+      emitProgress("credential-trap", "checking credential trap");
+      trapFinalHost = signals.finalHost || "";
+      trapArmed = true;
+      const attempted = await fillCredentialForm(page, canary);
+      if (attempted) {
+        const deadline = Date.now() + CREDENTIAL_TRAP_WAIT_MS;
+        while (!credentialTrapResult && Date.now() < deadline) {
+          await new Promise((r) => setTimeout(r, 100));
+        }
+      }
+      trapArmed = false;
+      credentialTrap = credentialTrapResult
+        ? {
+            attempted: true,
+            blocked: true,
+            target: credentialTrapResult.url,
+            host: credentialTrapResult.host,
+            method: credentialTrapResult.method,
+            crossDomain: credentialTrapResult.crossDomain,
+          }
+        : { attempted, blocked: false, target: null, host: null, crossDomain: false };
     }
 
     return {
@@ -309,6 +490,8 @@ export async function detonate(targetUrl) {
       blockedRequests: blocked,
       signals,
       screenshotBase64: screenshot,
+      replayFrames,
+      credentialTrap,
       detonatedAt: new Date().toISOString(),
     };
   } finally {
@@ -331,7 +514,7 @@ function dedupeChain(chain, finalUrl) {
 /**
  * Run inside the page to collect phishing-relevant DOM signals.
  */
-async function extractSignals(page, finalUrl) {
+async function extractSignals(page, finalUrl, runtimeSignals = {}) {
   let finalHost = "";
   try {
     finalHost = new URL(finalUrl).hostname.replace(/^www\./, "");
@@ -438,6 +621,10 @@ async function extractSignals(page, finalUrl) {
     metaRefresh: dom.metaRefresh,
     externalScriptCount: dom.externalScriptCount,
     brandImpersonation: brandMentions,
+    techSupportScam: detectTechSupportScam({
+      text: `${dom.titleText} ${dom.headingText} ${dom.bodyText}`,
+      runtime: runtimeSignals,
+    }),
   };
 }
 
@@ -446,11 +633,17 @@ async function collectRuntimeSignals(page) {
   try {
     return await page.evaluate(() => ({
       ...(window.__sandboxedThreatSignals || {}),
+      sandboxProbeProperties: Array.isArray(window.__sandboxedThreatSignals?.sandboxProbeProperties)
+        ? [...window.__sandboxedThreatSignals.sandboxProbeProperties]
+        : [],
       walletProviders: Array.isArray(window.__sandboxedThreatSignals?.walletProviders)
         ? [...window.__sandboxedThreatSignals.walletProviders]
         : [],
       clipboardSamples: Array.isArray(window.__sandboxedThreatSignals?.clipboardSamples)
         ? [...window.__sandboxedThreatSignals.clipboardSamples]
+        : [],
+      dialogSamples: Array.isArray(window.__sandboxedThreatSignals?.dialogSamples)
+        ? [...window.__sandboxedThreatSignals.dialogSamples]
         : [],
     }));
   } catch {

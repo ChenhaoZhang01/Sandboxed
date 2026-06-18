@@ -1,0 +1,147 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="robots" content="noindex, nofollow" />
+    <title>Sandboxed — Demo decoys (presenter only)</title>
+    <link rel="icon" href="data:," />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
+    <style>
+      :root {
+        --bg: #0e1217; --bg-2: #0b0f14; --panel: #161d27; --line: #29333f;
+        --line-bright: #3a4754; --ink: #e8edf2; --ink-dim: #93a0ae; --ink-faint: #5e6b79;
+        --cyan: #58d7e6; --cyan-deep: #2a9dab; --safe: #37d399; --warn: #ffa62b;
+        --danger: #ff5765; --radius: 8px;
+      }
+      * { box-sizing: border-box; }
+      body {
+        margin: 0; min-height: 100vh; color: var(--ink); font-family: "Space Grotesk", system-ui, sans-serif;
+        background:
+          radial-gradient(120% 80% at 100% 0%, #131b24 0%, transparent 55%),
+          radial-gradient(100% 70% at 0% 100%, #11171f 0%, transparent 55%), var(--bg);
+      }
+      .mono { font-family: "IBM Plex Mono", ui-monospace, monospace; }
+      main { max-width: 880px; margin: 0 auto; padding: 36px 22px 80px; }
+      .pill {
+        display: inline-block; font-size: 11px; letter-spacing: 0.1em; text-transform: uppercase;
+        color: var(--warn); border: 1px solid var(--warn); border-radius: 999px; padding: 4px 12px;
+      }
+      h1 { font-size: clamp(1.6rem, 4vw, 2.3rem); margin: 14px 0 6px; }
+      .sub { color: var(--ink-faint); margin: 0 0 14px; font-size: 14px; max-width: 60ch; }
+      .tips {
+        background: var(--bg-2); border: 1px solid var(--line); border-radius: var(--radius);
+        padding: 14px 18px; font-size: 13px; color: var(--ink-dim); margin: 18px 0 28px; line-height: 1.6;
+      }
+      .tips b { color: var(--ink); }
+      .card {
+        background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius);
+        padding: 18px 20px; margin-bottom: 16px;
+      }
+      .card h2 { font-size: 17px; margin: 0 0 4px; }
+      .verdict { font-size: 11px; letter-spacing: 0.1em; text-transform: uppercase; font-weight: 600; }
+      .v-dangerous { color: var(--danger); }
+      .desc { color: var(--ink-dim); font-size: 13px; margin: 6px 0 12px; line-height: 1.5; }
+      .desc .sig { color: var(--cyan); }
+      .urlrow { display: flex; gap: 8px; align-items: stretch; flex-wrap: wrap; }
+      .url {
+        flex: 1; min-width: 240px; background: var(--bg-2); border: 1px solid var(--line-bright);
+        border-radius: 6px; padding: 9px 12px; font-size: 12px; color: var(--ink); overflow-x: auto;
+        white-space: nowrap;
+      }
+      button {
+        font-family: "IBM Plex Mono", monospace; font-size: 12px; letter-spacing: 0.04em;
+        background: var(--cyan); color: #06222a; border: none; border-radius: 6px; padding: 0 16px;
+        cursor: pointer; font-weight: 600;
+      }
+      button.ghost { background: transparent; color: var(--ink-dim); border: 1px solid var(--line-bright); }
+      a.open { font-size: 12px; color: var(--ink-faint); text-decoration: none; align-self: center; }
+      a.open:hover { color: var(--cyan); }
+      .foot { margin-top: 24px; font-size: 12px; color: var(--ink-faint); line-height: 1.6; }
+    </style>
+  </head>
+  <body>
+    <main>
+      <span class="pill">Presenter only · unlisted</span>
+      <h1>Demo decoys</h1>
+      <p class="sub">
+        Safe, self-hosted fake-malicious pages for live demos. You never visit these directly —
+        copy a URL and <b>detonate it in Sandboxed</b>. Each one reliably triggers specific signals.
+      </p>
+
+      <div class="tips">
+        <b>Before you present:</b> open the app, run one warm-up detonation (the first one is slow —
+        cold server + first Chromium launch). For the password-trap reveal, turn on
+        <b>Password trap</b> in Options; for the video, leave <b>Record replay</b> on. Recommended:
+        also enable <b>Phishing detector</b>. These pages are <span class="mono">noindex</span> and
+        marked "SANDBOX DECOY", so they never affect your real site.
+      </div>
+
+      <div class="card">
+        <h2>1. Phishing kit <span class="verdict v-dangerous">→ dangerous</span></h2>
+        <p class="desc">
+          A "security alert" link that <span class="sig">bounces through 3 redirects</span> into a fake
+          bank login that <span class="sig">impersonates a brand</span> and
+          <span class="sig">POSTs your password off-domain</span>. Turn on the password trap to watch
+          the sandbox auto-fill decoy creds and catch where they'd be sent.
+        </p>
+        <div class="urlrow">
+          <div class="url mono" data-path="/demo/link.html"></div>
+          <button onclick="copyRow(this)">Copy</button>
+          <a class="open" href="./link.html" target="_blank" rel="noopener">preview ↗</a>
+        </div>
+      </div>
+
+      <div class="card">
+        <h2>2. Gift-card / giveaway scam <span class="verdict v-dangerous">→ dangerous</span></h2>
+        <p class="desc">
+          "You won a $500 gift card" — trips the <span class="sig">giveaway-scam language</span> signal
+          and asks for <span class="sig">card details</span> (payment harvesting).
+        </p>
+        <div class="urlrow">
+          <div class="url mono" data-path="/demo/gift-card.html"></div>
+          <button onclick="copyRow(this)">Copy</button>
+          <a class="open" href="./gift-card.html" target="_blank" rel="noopener">preview ↗</a>
+        </div>
+      </div>
+
+      <div class="card">
+        <h2>3. Tech-support scam <span class="verdict v-dangerous">→ dangerous</span></h2>
+        <p class="desc">
+          A fake "virus detected" page with a support number that <span class="sig">throws a blocking
+          dialog</span>, <span class="sig">requests fullscreen</span>, and
+          <span class="sig">hooks exit</span> — the lockout pattern real scam pages use.
+        </p>
+        <div class="urlrow">
+          <div class="url mono" data-path="/demo/virus-alert.html"></div>
+          <button onclick="copyRow(this)">Copy</button>
+          <a class="open" href="./virus-alert.html" target="_blank" rel="noopener">preview ↗</a>
+        </div>
+      </div>
+
+      <p class="foot">
+        Note on domain age: these live on your real (well-aged) domain, so the "new domain" flag
+        won't fire. A real attacker's domain would be days old — mention that to judges, or host a
+        decoy on a throwaway domain if you want that signal live. Open <a class="open" href="/app/" style="color:var(--cyan)">the app ↗</a>
+      </p>
+    </main>
+
+    <script>
+      // Build absolute, paste-ready URLs from wherever this is hosted.
+      const origin = location.origin;
+      document.querySelectorAll(".url").forEach((el) => {
+        el.textContent = origin + el.dataset.path;
+      });
+      function copyRow(btn) {
+        const url = btn.parentElement.querySelector(".url").textContent;
+        navigator.clipboard.writeText(url).then(() => {
+          const old = btn.textContent;
+          btn.textContent = "Copied!";
+          setTimeout(() => (btn.textContent = old), 1200);
+        });
+      }
+    </script>
+  </body>
+</html>
