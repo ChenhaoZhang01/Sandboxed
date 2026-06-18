@@ -3,14 +3,14 @@ import { isBlockedUrl, isBlockedLiteral } from "./ssrf.js";
 import { detectTechSupportScam, detectTyposquat, inspectTlsSecurity } from "./threatSignals.js";
 import { makeCanary, fillCredentialForm, matchCanaryHit } from "./credentialTrap.js";
 
-const DETONATE_TIMEOUT_MS = Number(process.env.DETONATE_TIMEOUT_MS || 30000);
+const DETONATE_TIMEOUT_MS = Number(process.env.DETONATE_TIMEOUT_MS || 20000);
 const MAX_REDIRECTS = Number(process.env.MAX_REDIRECTS || 15);
-const SCREENSHOT_DELAY_MS = Number(process.env.SCREENSHOT_DELAY_MS || 1500);
-const PAGE_SETTLE_TIMEOUT_MS = Number(process.env.PAGE_SETTLE_TIMEOUT_MS || 8000);
-const PAGE_IDLE_TIME_MS = Number(process.env.PAGE_IDLE_TIME_MS || 1500);
+const SCREENSHOT_DELAY_MS = Number(process.env.SCREENSHOT_DELAY_MS || 250);
+const PAGE_SETTLE_TIMEOUT_MS = Number(process.env.PAGE_SETTLE_TIMEOUT_MS || 2000);
+const PAGE_IDLE_TIME_MS = Number(process.env.PAGE_IDLE_TIME_MS || 400);
 // Recorded-replay screencast tuning + how long to wait for the canary submission.
-const REPLAY_MAX_FRAMES = Number(process.env.REPLAY_MAX_FRAMES || 30);
-const CREDENTIAL_TRAP_WAIT_MS = Number(process.env.CREDENTIAL_TRAP_WAIT_MS || 3000);
+const REPLAY_MAX_FRAMES = Number(process.env.REPLAY_MAX_FRAMES || 12);
+const CREDENTIAL_TRAP_WAIT_MS = Number(process.env.CREDENTIAL_TRAP_WAIT_MS || 1200);
 
 // A realistic UA so phishing kits behave normally (many cloak against headless).
 const USER_AGENT =

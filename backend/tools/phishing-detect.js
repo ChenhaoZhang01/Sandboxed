@@ -3,7 +3,7 @@ import { compareFavicons } from "./favicon-compare.js";
 import { findRealSiteViaBrowser } from "./brand-search.js";
 import { runWithTimeout } from "../src/timeouts.js";
 
-const BRAND_SEARCH_TIMEOUT_MS = Number(process.env.BRAND_SEARCH_TIMEOUT_MS || 8000);
+const BRAND_SEARCH_TIMEOUT_MS = Number(process.env.BRAND_SEARCH_TIMEOUT_MS || 3000);
 const MAX_SEARCH_RESULTS = Number(process.env.MAX_SEARCH_RESULTS || 3);
 const MAX_FAVICON_COMPARISONS = Number(process.env.MAX_FAVICON_COMPARISONS || 3);
 

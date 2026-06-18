@@ -13,7 +13,7 @@ const SBX = (() => {
       domainAge: true,
       safeBrowsing: true,
       phishingEnrichment: false,
-      recordReplay: true,
+      recordReplay: false,
       credentialTrap: false,
     },
     historyEnabled: true,
@@ -33,8 +33,8 @@ const SBX = (() => {
       domainAge: layers.domainAge !== false,
       safeBrowsing: layers.safeBrowsing !== false,
       phishingEnrichment: layers.phishingEnrichment === true,
-      // Recorded replay (default on) + canary password trap (opt-in).
-      recordReplay: layers.recordReplay !== false,
+      // Recorded replay is opt-in so the default flow stays fast.
+      recordReplay: layers.recordReplay === true,
       credentialTrap: layers.credentialTrap === true,
     };
   }
@@ -79,15 +79,17 @@ async function detonate(url, opts = {}) {
   const settings = await getSettings();
   const base = settings.apiBase;
   const analysisLayers = normalizeAnalysisLayers(opts.analysisLayers || settings.analysisLayers);
-  const timeoutMs = opts.timeoutMs ?? 25000;
+  const timeoutMs = opts.timeoutMs ?? 18000;
 
   const controller = new AbortController();
   const t = setTimeout(() => controller.abort(), timeoutMs);
 
-    const normalize = (u) => {
+    const normalizeHistoryUrl = (u) => {
       try {
         const url = new URL(u.includes("://") ? u : "http://" + u);
-        return url.hostname.replace(/^www\./, "");
+        url.hostname = url.hostname.replace(/^www\./, "");
+        url.hash = "";
+        return url.toString();
       } catch {
         return u
           .replace(/^https?:\/\//, "")
@@ -107,7 +109,7 @@ async function detonate(url, opts = {}) {
       } catch {}
 
       const match = verifiedLinks.find(
-        (x) => normalize(x.url) === normalize(url)
+        (x) => normalizeHistoryUrl(x.url) === normalizeHistoryUrl(url)
       );
 
       if (match) {
@@ -138,7 +140,7 @@ async function detonate(url, opts = {}) {
       await fetch(base + "/verified-links/add", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ url, data: cacheable }),
+        body: JSON.stringify({ url: normalizeHistoryUrl(url), data: cacheable }),
       });
     } catch (e) {
       console.warn("failed to store verified link:", e.message);

@@ -76,7 +76,7 @@ async function detonate(rawUrl) {
   }
   urlInput.value = url;
   resetView();
-  spinner.classList.remove("hidden");
+      recordReplay: checked("replaySwitch"),
   goBtn.disabled = true;
   setDetonationProgress({ message: "resolving target" });
 
@@ -133,7 +133,7 @@ function currentAnalysisLayers() {
     domainAge: checked("domainAgeSwitch", true),
     safeBrowsing: checked("safeBrowsingSwitch", true),
     phishingEnrichment: checked("phishingSwitch"),
-    recordReplay: checked("replaySwitch", true),
+    recordReplay: checked("replaySwitch"),
     credentialTrap: checked("trapSwitch"),
   };
 }

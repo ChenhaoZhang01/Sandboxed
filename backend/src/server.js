@@ -20,8 +20,8 @@ const __dirname = path.dirname(__filename);
 
 const app = express();
 const PORT = Number(process.env.PORT || 8787);
-const PHISHING_ENRICHMENT_TIMEOUT_MS = Number(process.env.PHISHING_ENRICHMENT_TIMEOUT_MS || 10000);
-const NARRATIVE_TIMEOUT_MS = Number(process.env.NARRATIVE_TIMEOUT_MS || 20000);
+const PHISHING_ENRICHMENT_TIMEOUT_MS = Number(process.env.PHISHING_ENRICHMENT_TIMEOUT_MS || 3000);
+const NARRATIVE_TIMEOUT_MS = Number(process.env.NARRATIVE_TIMEOUT_MS || 5000);
 
 function resolveAnalysisLayers(input = {}) {
   return {

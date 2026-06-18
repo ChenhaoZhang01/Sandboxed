@@ -51,8 +51,6 @@ function extractDangerousLinkCount(payload) {
 }
 
 function setDangerousLinkCount(count) {
-  if (!numberLinks) return;
-
   const safeCount = Number(count) || 0;
   numberLinks.dataset.count = String(safeCount);
   numberLinks.textContent = `${DANGEROUS_LINKS_LABEL} ${safeCount}`;
@@ -232,7 +230,7 @@ function currentAnalysisLayers() {
     domainAge: checked("domainAgeSwitch", true),
     safeBrowsing: checked("safeBrowsingSwitch", true),
     phishingEnrichment: checked("phishingSwitch"),
-    recordReplay: checked("replaySwitch", true),
+    recordReplay: checked("replaySwitch"),
     credentialTrap: checked("trapSwitch"),
     aiNarrative: checked("narrativeSwitch"),
   };
