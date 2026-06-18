@@ -110,7 +110,27 @@ app.get("/verified-links", async (_req, res) => {
     res.status(500).json({ error: "Failed to load verified links" });
   }
 });
+app.get("/dangerous-links", async (_req, res) => {
+  try {
+    const data = await getDangerousLinks();
+    res.json({ ok: true, data });
+  } catch (err) {
+    res.status(500).json({ error: "Failed to load dangerous links" });
+  }
+});
+app.post("/dangerous-links/add", async (req, res) => {
+  try {
+    const newCount = await addDangerousLinkCount();
 
+    res.json({
+      ok: true,
+      dangerousLinks: newCount
+    });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "Failed to update dangerous link count" });
+  }
+});
 app.post("/verified-links/add", async (req, res) => {
   try {
     const { url, data } = req.body;
@@ -415,7 +435,29 @@ async function addVerifiedLink(url, data) {
 
   return entry;
 }
-
+async function addDangerousLinkCount() {
+  const filePath = path.join(__dirname, "../dangerousLinks.json")
+  let existing = [0]
+  try {
+    const raw = await readFile(filePath, "utf8");
+    existing = JSON.parse(raw);
+  } catch {
+    existing = [0];
+  }
+  existing[0] = (existing[0] || 0) + 1;
+  await writeFile(filePath,JSON.stringify(existing,null,2), "utf8");
+  return existing[0];
+}
+async function getDangerousLinks(url, data) {
+  try{
+    const filePath = path.join(__dirname, "../dangerousLinks.json")
+    const rawData = await readFile(filePath, "utf8");
+    return JSON.parse(rawData);
+  } catch (error) {
+    console.error("Error reading file:", error);
+    return [];
+  }
+}
 async function resolveTarget(input) {
   if (!input) return null;
   let candidate = input;
