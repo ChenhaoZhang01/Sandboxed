@@ -312,8 +312,10 @@ function renderScanResult(filename, local, server) {
     lines.push(`ClamAV: could not complete scan (${server.message || "unknown error"}).`);
   }
 
-  const infected = (server.status == "infected") || local.foundIndicators.length > 0;
-  const confirmedClean = (server.status == "clean") && local.foundIndicators.length === 0;
+  // /AA (additional actions) alone is a weak signal — common in benign PDFs
+  const onlyWeakIndicator = local.foundIndicators.length == 1 && local.foundIndicators[0] == "/AA";
+  const infected = (server.status == "infected") || (local.foundIndicators.length > 0 && !onlyWeakIndicator);
+  const confirmedClean = (server.status == "clean") && local.foundIndicators.length == 0;
 
   scanResult.textContent = lines.join("\n");
   scanResult.classList.remove("hidden", "safe", "warn", "danger");
