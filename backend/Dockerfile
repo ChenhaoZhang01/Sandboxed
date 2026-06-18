@@ -8,10 +8,12 @@ FROM ghcr.io/puppeteer/puppeteer:24.43.1
 
 USER root
 
-# Install a local ClamAV daemon. The app talks to it over 127.0.0.1:3310.
+# Install ClamAV tooling locally. The app prefers a local clamd daemon over
+# 127.0.0.1:3310, but can fall back to the clamscan binary if the daemon is not
+# reachable.
 # freshclam is run at build time so the container starts quickly at runtime.
 RUN apt-get update \
-    && apt-get install -y --no-install-recommends clamav-daemon clamav-freshclam \
+    && apt-get install -y --no-install-recommends clamav clamav-daemon clamav-freshclam \
     && freshclam --stdout || true \
     && rm -rf /var/lib/apt/lists/*
 

@@ -9,28 +9,33 @@ const CLAMD_SOCKET = process.env.CLAMD_SOCKET || "/var/run/clamav/clamd.ctl";
 const CLAMD_HOST = process.env.CLAMD_HOST || "";
 const CLAMD_PORT = Number(process.env.CLAMD_PORT || 3310);
 const CLAM_INIT_TIMEOUT_MS = Number(process.env.CLAM_INIT_TIMEOUT_MS || 5000);
+const CLAMSCAN_BIN = process.env.CLAMSCAN_BIN || "/usr/bin/clamscan";
 
 let clamscanPromise = null;
 let clamdInitWarned = false;
 
-function hasClamdEndpoint() {
-  return !!CLAMD_HOST || existsSync(CLAMD_SOCKET);
+function hasScannerBackend() {
+  return !!CLAMD_HOST || existsSync(CLAMD_SOCKET) || existsSync(CLAMSCAN_BIN);
 }
 
 async function getClamscan() {
-  if (!hasClamdEndpoint()) {
+  if (!hasScannerBackend()) {
     return null;
   }
   if (!clamscanPromise) {
     clamscanPromise = new NodeClam()
       .init({
         removeInfected: false,
+        clamscan: {
+          path: CLAMSCAN_BIN,
+          active: true,
+        },
         clamdscan: {
           socket: CLAMD_HOST ? false : CLAMD_SOCKET,
           host: CLAMD_HOST || false,
           port: CLAMD_HOST ? CLAMD_PORT : false,
           timeout: CLAM_INIT_TIMEOUT_MS,
-          localFallback: false,
+          localFallback: true,
         },
         preference: "clamdscan",
       })
