@@ -31,7 +31,46 @@ export async function scoreRisk(report, options = {}) {
   const s = report.signals || {};
   const host = s.finalHost || "";
   const phishingSpoofedBrand = report.phishing && report.phishing.phishing === true;
+  const trustedHost = isTrustedDomain(host);
+  const userVerified = await isVerifiedHost(host);
+  const trustedContext = trustedHost || userVerified;
   const runtimeThreatSummary = classifySignalThreats(s);
+
+  if (trustedContext) {
+    const benignAutomationSignals = [
+      /navigator\.webdriver/i,
+      /exit-lock style navigation hooks/i,
+      /dynamic code execution hooks/i,
+      /input and key-event listeners were attached/i,
+      /page requested fullscreen mode/i,
+      /blocking alert\/confirm\/prompt dialogs/i,
+      /clipboard write hooks/i,
+      /tls protocol is weaker than tls 1\.2\/1\.3/i,
+      /third-party tracker domains were loaded/i,
+      /many third-party resources were loaded/i,
+      /the page uses many cookies or cookie-like storage entries/i,
+      /client-side storage is heavily used/i,
+    ];
+
+    const filteredReasons = [];
+    let discountedPoints = 0;
+    for (const item of runtimeThreatSummary.reasons) {
+      if (benignAutomationSignals.some((pattern) => pattern.test(item.reason))) {
+        discountedPoints += item.points;
+        continue;
+      }
+      filteredReasons.push(item);
+    }
+
+    if (discountedPoints > 0) {
+      runtimeThreatSummary.score = Math.max(0, runtimeThreatSummary.score - discountedPoints);
+      runtimeThreatSummary.reasons = filteredReasons;
+      reasons.unshift({
+        points: 0,
+        reason: `Trusted major service ${host || "site"} shows anti-automation / bot-detection signals; not treated as malware`,
+      });
+    }
+  }
 
   score += runtimeThreatSummary.score;
   reasons.push(...runtimeThreatSummary.reasons);
@@ -137,7 +176,7 @@ export async function scoreRisk(report, options = {}) {
   // "verified", and the trust clamp below would wrongly downgrade a malicious
   // page to safe. The runtime threat score crossing this bar is malice we won't
   // discount on trust.
-  const behavioralDanger = runtimeThreatSummary.score >= 35;
+  const behavioralDanger = runtimeThreatSummary.score >= 35 && !trustedContext;
 
   // Hard evidence of compromise — never suppressed, even on a trusted domain
   // (covers hijacked legit sites / open redirects / subdomain takeover).
@@ -152,16 +191,15 @@ export async function scoreRisk(report, options = {}) {
 
   // #1 allowlist + #2 user-verified: strong trust → clamp the verdict to safe
   // (unless hard danger above), discounting the benign login/redirect signals.
-  const onAllowlist = isTrustedDomain(host);
-  const userVerified = await isVerifiedHost(host);
-  if (!hardDanger && (onAllowlist || userVerified)) {
+  const onAllowlist = trustedHost;
+  if (!hardDanger && trustedContext) {
     const why = onAllowlist
       ? `${host} is a recognized legitimate domain`
       : `${host} was previously verified by the user`;
     score = Math.min(score, THRESHOLDS.suspicious - 1);
     reasons.unshift({
       points: 0,
-      reason: `Common-sense check: ${why}; benign login/redirect signals discounted`,
+      reason: `Common-sense check: ${why}; benign anti-automation/login/redirect signals discounted`,
     });
   }
 

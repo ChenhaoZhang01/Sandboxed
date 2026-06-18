@@ -4,6 +4,7 @@
 // detonation result is unaffected.
 
 import { GoogleGenAI } from "@google/genai";
+import { isTrustedDomain } from "./intel/trustedDomains.js";
 
 const NARRATIVE_MODEL = process.env.NARRATIVE_MODEL || "gemini-2.5-flash";
 const NARRATIVE_MAX_TOKENS = Number(process.env.NARRATIVE_MAX_TOKENS || 400);
@@ -27,8 +28,11 @@ const SYSTEM_PROMPT =
   "If the analysis shows brand impersonation, phishing detection, cross-domain " +
   "credential submission, auto-downloads, or blocked/private-address behavior, " +
   "treat it as malicious or suspicious even if the host was previously verified. " +
-  "Do not call it safe just because it is a known host or because no password theft " +
-  "was captured. End with a one-line bottom line on whether to trust it. " +
+  "If the site is a trusted major service like X/Twitter and the only oddities are " +
+  "sandbox checks, anti-bot listeners, or TLS metadata, describe those as anti-automation " +
+  "behavior rather than keylogging or theft. Do not call it safe just because it is a " +
+  "known host or because no password theft was captured. End with a one-line bottom line " +
+  "on whether to trust it. " +
   "Respond with only the explanation: no preamble, no markdown, no reasoning.";
 
 /**
@@ -42,6 +46,7 @@ function summarizeReport(result) {
     verdict: result.verdict,
     score: result.score,
     finalHost: result.finalHost || null,
+    trustedHost: isTrustedDomain(result.finalHost || ""),
     requestedUrl: result.requestedUrl || null,
     pageTitle: result.title || null,
     redirectCount: result.redirectCount ?? 0,
@@ -70,6 +75,25 @@ function summarizeReport(result) {
 export async function explainThreat(result) {
   const ai = getClient();
   if (!ai) return null;
+
+  const s = result.signals || {};
+  const trustedHost = isTrustedDomain(result.finalHost || s.finalHost || "");
+  const hardDanger = Boolean(
+    (result.phishing && result.phishing.phishing === true) ||
+    (result.credentialTrap && result.credentialTrap.blocked) ||
+    (result.downloads && result.downloads.length > 0) ||
+    (result.blockedRequests && result.blockedRequests.length > 0) ||
+    (s.brandImpersonation && s.brandImpersonation.length > 0) ||
+    s.crossDomainCredPost
+  );
+
+  if (trustedHost && !hardDanger) {
+    return (
+      `This is ${result.finalHost || "a trusted site"}. The signals here look like anti-automation or bot-detection behavior ` +
+      `rather than proof of keylogging or phishing, which is common on major services like X/Twitter. ` +
+      `Based on these signals alone, I would not treat it as malware.`
+    );
+  }
 
   try {
     const response = await ai.models.generateContent({

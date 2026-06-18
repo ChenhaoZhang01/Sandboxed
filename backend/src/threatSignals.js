@@ -146,6 +146,7 @@ export function inspectTlsSecurity(url, securityDetails) {
   })();
 
   const protocol = details.protocol || "unknown";
+  const protocolNormalized = String(protocol || "").toLowerCase().replace(/\s+/g, "");
   const subjectName = details.subjectName || "";
   const issuer = details.issuer || "";
   const validFrom = details.validFrom || null;
@@ -156,7 +157,7 @@ export function inspectTlsSecurity(url, securityDetails) {
       !subjectName.toLowerCase().includes(host.replace(/^www\./, ""))
   );
   const expired = typeof validTo === "number" ? validTo * 1000 < Date.now() : false;
-  const weakProtocol = !/^tlsv1\.[23]$/i.test(protocol.replace(/\s+/g, ""));
+  const weakProtocol = /(?:^|[^0-9])(?:ssl|tlsv1\.[01])/.test(protocolNormalized);
   const selfSigned = /self[- ]?signed|localhost/i.test(issuer + " " + subjectName);
 
   return {
